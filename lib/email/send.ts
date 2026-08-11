@@ -1,0 +1,294 @@
+// lib/email/send.ts
+//
+// Typed send functions for every email type in the platform.
+// Every function:
+//   1. Calls shouldSend() — respects org preferences and batch cooldowns
+//   2. Renders the template
+//   3. Calls sendEmailAsync() — fire-and-forget, never blocks a request
+//   4. Records batch sends where applicable
+//
+// Import from here, not from lib/email.ts directly, so policy is always enforced.
+//
+// Usage:
+//   import { sendNewMemoryDigest } from '@/lib/email/send';
+//   await sendNewMemoryDigest({ memorialId, memorialTitle, ownerEmail, count: 3 });
+
+import { sendEmailAsync, getAppUrl, getModerationUrl, getMemorialUrl } from '@/lib/email';
+import { shouldSend, recordBatchSent, getOrgIdForMemorial } from '@/lib/email/policy';
+import { renderNewMemoryEmail }       from '@/lib/email-templates/new-memory-email';
+import { renderWelcomeEmail }         from '@/lib/email-templates/welcome-email';
+import { renderStalePendingEmail }    from '@/lib/email-templates/automation-emails';
+import { renderExpiryWarningEmail }   from '@/lib/email-templates/automation-emails';
+import { renderMemorialSuspendedEmail } from '@/lib/email-templates/automation-emails';
+import {
+  renderHandoverInitiatedEmail,
+  renderHandoverAcceptedFHEmail,
+  renderHandoverAcceptedFamEmail,
+} from '@/lib/email-templates/handover';
+
+const APP_URL = getAppUrl();
+
+// ── 1. Welcome email (memorial created) ──────────────────────────────────────
+
+export async function sendWelcomeEmail(params: {
+  ownerEmail:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  qrCodeDataUrl: string;
+  slug:          string;
+  publicToken?:  string;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'WELCOME')) return;
+
+  // FIXED: previously fell back to the retired `/m/{memorialId}` URL shape
+  // when publicToken was missing, producing a dead link in the welcome
+  // email. publicToken is generated lazily (see app/api/memorials/[id]/qr/
+  // route.ts) — if it's not passed in yet, fall back to the dashboard QR
+  // page instead of a broken public link.
+  const publicUrl = params.publicToken
+    ? getMemorialUrl(params.slug, params.publicToken)
+    : `${APP_URL}/dashboard/memorial/${params.memorialId}/qr`;
+  const dashboardUrl = `${APP_URL}/dashboard/memorial/${params.memorialId}/qr`;
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `Memorial created: ${params.memorialTitle}`,
+    html:    renderWelcomeEmail({
+      memorialTitle: params.memorialTitle,
+      memorialId:    params.memorialId,
+      publicUrl,
+      qrCodeDataUrl: params.qrCodeDataUrl,
+      dashboardUrl,
+    }),
+  });
+}
+
+// ── 2. New memory digest (batched — max 1/hour per memorial) ─────────────────
+// Call this each time a memory is submitted. Policy enforces the cooldown.
+
+export async function sendNewMemoryDigest(params: {
+  ownerEmail:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  authorName:    string | null;
+  excerpt:       string;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'NEW_MEMORY_DIGEST', params.memorialId)) return;
+
+  const moderationUrl = getModerationUrl(params.memorialId);
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `New memory submitted — ${params.memorialTitle}`,
+    html:    renderNewMemoryEmail({
+      memorialTitle:  params.memorialTitle,
+      memorialId:     params.memorialId,
+      authorName:     params.authorName,
+      messageExcerpt: params.excerpt,
+      moderationUrl,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'NEW_MEMORY_DIGEST', params.memorialId);
+}
+
+// ── 3. Upload digest (batched — max 1/hour per memorial) ─────────────────────
+
+export async function sendUploadDigest(params: {
+  ownerEmail:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  uploadCount:   number;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'UPLOAD_DIGEST', params.memorialId)) return;
+
+  const moderationUrl = getModerationUrl(params.memorialId);
+  const n = params.uploadCount;
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `${n} new ${n === 1 ? 'upload' : 'uploads'} need review — ${params.memorialTitle}`,
+    html: renderNewMemoryEmail({
+      // Reuse new-memory template shape — close enough for uploads
+      memorialTitle:  params.memorialTitle,
+      memorialId:     params.memorialId,
+      authorName:     null,
+      messageExcerpt: `${n} new ${n === 1 ? 'photo has' : 'photos have'} been uploaded and ${n === 1 ? 'needs' : 'need'} your review before appearing in the gallery.`,
+      moderationUrl,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'UPLOAD_DIGEST', params.memorialId);
+}
+
+// ── 4. Stale pending memories ─────────────────────────────────────────────────
+
+export async function sendStalePendingEmail(params: {
+  ownerEmail:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  staleCount:    number;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'STALE_PENDING', params.memorialId)) return;
+
+  const moderationUrl = getModerationUrl(params.memorialId);
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `${params.staleCount} ${params.staleCount === 1 ? 'memory needs' : 'memories need'} attention — ${params.memorialTitle}`,
+    html:    renderStalePendingEmail({
+      memorialTitle:  params.memorialTitle,
+      staleCount:     params.staleCount,
+      moderationUrl,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'STALE_PENDING', params.memorialId);
+}
+
+// ── 5. Handover initiated → family ───────────────────────────────────────────
+
+export async function sendHandoverInitiated(params: {
+  familyEmail:        string;
+  familyContactName:  string;
+  memorialId:         string;
+  memorialTitle:      string;
+  funeralHomeName:    string;
+  acceptToken:        string;
+  expiresAt:          Date;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'HANDOVER_INITIATED')) return;
+
+  const acceptUrl = `${APP_URL}/handover/accept/${params.acceptToken}`;
+
+  sendEmailAsync({
+    to:      params.familyEmail,
+    subject: `You've been invited to manage ${params.memorialTitle}'s memorial`,
+    html:    renderHandoverInitiatedEmail({
+      memorialTitle:     params.memorialTitle,
+      familyContactName: params.familyContactName,
+      funeralHomeName:   params.funeralHomeName,
+      acceptUrl,
+      expiresAt:         params.expiresAt,
+    }),
+  });
+}
+
+// ── 6a. Handover accepted → funeral home ─────────────────────────────────────
+
+export async function sendHandoverAcceptedToFH(params: {
+  funeralHomeEmail:  string;
+  memorialId:        string;
+  memorialTitle:     string;
+  familyContactName: string;
+  familyEmail:       string;
+  acceptedAt:        Date;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'HANDOVER_ACCEPTED_FH')) return;
+
+  const dashboardUrl = `${APP_URL}/dashboard/memorials`;
+
+  sendEmailAsync({
+    to:      params.funeralHomeEmail,
+    subject: `Handover complete — ${params.memorialTitle}`,
+    html:    renderHandoverAcceptedFHEmail({
+      memorialTitle:     params.memorialTitle,
+      familyContactName: params.familyContactName,
+      familyEmail:       params.familyEmail,
+      acceptedAt:        params.acceptedAt,
+      dashboardUrl,
+    }),
+  });
+}
+
+// ── 6b. Handover accepted → family (confirmation) ────────────────────────────
+
+export async function sendHandoverAcceptedToFamily(params: {
+  familyEmail:       string;
+  familyContactName: string;
+  memorialId:        string;
+  memorialTitle:     string;
+  slug?:             string;
+  publicToken?:      string;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'HANDOVER_ACCEPTED_FAM')) return;
+
+  // FIXED: previously used a retired `qrTokenHash` param and the old
+  // /m/{token} URL shape via getMemorialUrl(token). Public memorial URLs
+  // now need both slug and publicToken — see app/v/[slug].
+  const memorialUrl  = params.slug && params.publicToken
+    ? getMemorialUrl(params.slug, params.publicToken)
+    : `${APP_URL}/dashboard`;
+  const dashboardUrl = `${APP_URL}/dashboard/memorials`;
+
+  sendEmailAsync({
+    to:      params.familyEmail,
+    subject: `You now manage ${params.memorialTitle}'s memorial`,
+    html:    renderHandoverAcceptedFamEmail({
+      memorialTitle:     params.memorialTitle,
+      familyContactName: params.familyContactName,
+      memorialUrl,
+      dashboardUrl,
+    }),
+  });
+}
+
+// ── 7. Expiry warning ─────────────────────────────────────────────────────────
+
+export async function sendExpiryWarning(params: {
+  ownerEmail:     string;
+  memorialId:     string;
+  memorialTitle:  string;
+  expiresAt:      Date;
+  yearsRemaining: number;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'EXPIRY_WARNING', params.memorialId)) return;
+
+  const renewUrl = `${APP_URL}/dashboard/memorial/${params.memorialId}/settings`;
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `Action needed: ${params.memorialTitle} expires in ${params.yearsRemaining} ${params.yearsRemaining === 1 ? 'year' : 'years'}`,
+    html:    renderExpiryWarningEmail({
+      memorialTitle:  params.memorialTitle,
+      ownerEmail:     params.ownerEmail,
+      expiresAt:      params.expiresAt,
+      renewUrl,
+      yearsRemaining: params.yearsRemaining,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'EXPIRY_WARNING', params.memorialId);
+}
+
+// ── 8. Memorial suspended ─────────────────────────────────────────────────────
+
+export async function sendMemorialSuspended(params: {
+  ownerEmail:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  expiresAt:     Date;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'MEMORIAL_SUSPENDED')) return;
+
+  const renewUrl = `${APP_URL}/dashboard/memorial/${params.memorialId}/settings`;
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `Memorial suspended — ${params.memorialTitle}`,
+    html:    renderMemorialSuspendedEmail({
+      memorialTitle: params.memorialTitle,
+      renewUrl,
+      expiresAt:     params.expiresAt,
+    }),
+  });
+}
