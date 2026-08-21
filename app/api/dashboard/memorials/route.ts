@@ -40,11 +40,57 @@ export async function GET(request: NextRequest) {
         // the list page falls back to /dashboard/.../qr for those rows.
         slug: true,
         publicToken: true,
+        // ── ADDED: "needs action" alert — same fields the memorial journey
+        // tracker and locked-section gates already use (see
+        // lib/memorial/journeyGate.ts and components/journey/MemorialJourney.tsx),
+        // just surfaced here too so it's visible at a glance from the list.
+        funeralDate:          true,
+        publishPromptSentAt:  true,
+        tributeUnlockOverride: true,
+        handover: { select: { status: true } },
+        _count: { select: { memories: { where: { status: 'PENDING' } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return successResponse({ memorials });
+    const withAlerts = memorials.map(m => {
+      const { _count, handover, ...rest } = m;
+      const pendingCount = _count.memories;
+
+      // Same "day before service" timing as the publish-prompt email
+      // (lib/memorial/journeyGate.ts: PUBLISH_PROMPT_DAYS_BEFORE) — kept
+      // as an inline day-diff here rather than importing the job-facing
+      // helper, since this only needs a yes/no, not the exact count.
+      const now = new Date();
+      const daysUntilService = m.funeralDate
+        ? Math.round((new Date(m.funeralDate).setHours(0,0,0,0) - new Date(now).setHours(0,0,0,0)) / 86400000)
+        : null;
+
+      const alerts: { type: string; label: string }[] = [];
+
+      if (pendingCount > 0) {
+        alerts.push({ type: 'pending', label: `${pendingCount} to review` });
+      }
+      if (
+        m.funeralDate &&
+        daysUntilService !== null &&
+        daysUntilService <= 1 &&
+        m.workflowStage !== 'LIVE' &&
+        m.workflowStage !== 'HANDED_OVER'
+      ) {
+        alerts.push({ type: 'publish', label: 'Ready to publish' });
+      }
+      if (!m.funeralDate && m.status === 'ACTIVE') {
+        alerts.push({ type: 'no-date', label: 'No service date set' });
+      }
+      if (handover?.status === 'PENDING') {
+        alerts.push({ type: 'handover', label: 'Handover awaiting family' });
+      }
+
+      return { ...rest, alerts };
+    });
+
+    return successResponse({ memorials: withAlerts });
 
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error) {

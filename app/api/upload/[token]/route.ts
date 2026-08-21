@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { saveUploadedFile } from '@/lib/storage-server';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { verifyFileContent } from '@/lib/file-validation';
 
 const MAX_FILES_PER_REQUEST = 1; // One at a time from the client
 const MAX_FILE_SIZE_BYTES   = 50 * 1024 * 1024; // 50MB
@@ -13,10 +15,12 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'i
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
   const memorial = await prisma.memorial.findUnique({
-    where:  { uploadLinkToken: params.token },
+    where:  { uploadLinkToken: token },
     select: {
       id:               true,
       title:            true,
@@ -46,11 +50,23 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
+  // No auth on this route by design — the upload token IS the
+  // credential (family members use it with no account). It had no
+  // rate limiting at all though, unlike every other public write
+  // endpoint in this app (memorial-access/unlock, guest-book, etc.) —
+  // MAX_UPLOADS_PER_TOKEN caps total volume but nothing stopped a
+  // client from burning through that cap in a rapid burst, each one
+  // still doing a DB lookup + S3 write before being rejected.
+  const limited = await checkRateLimit(request, `upload:${token}`, { max: 20, windowMs: 60 * 1000 });
+  if (limited) return limited;
+
   // Validate token
   const memorial = await prisma.memorial.findUnique({
-    where:  { uploadLinkToken: params.token },
+    where:  { uploadLinkToken: token },
     select: {
       id:               true,
       uploadLinkEnabled: true,
@@ -100,6 +116,20 @@ export async function POST(
     return NextResponse.json({ success: false, error: `File too large. Maximum is 50MB.` }, { status: 400 });
   }
 
+  // Magic-byte check — verify the file's actual content matches its
+  // declared type, rather than trusting the client-supplied
+  // Content-Type header alone. Was missing here even though the
+  // sibling api/collect/[token]/route.ts already does this — see
+  // lib/file-validation.ts for why it matters: uploads are served
+  // directly by URL (via S3 in production, public/uploads/** in dev),
+  // so a mislabeled file is a stored XSS risk against anyone who opens
+  // the link, not just a data-integrity issue.
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const contentCheck = verifyFileContent(buffer, isHeic ? 'image/heic' : file.type);
+  if (!contentCheck.valid) {
+    return NextResponse.json({ success: false, error: contentCheck.reason }, { status: 400 });
+  }
+
   try {
     // Save file to storage
     const blobKey = await saveUploadedFile(file, `memorials/${memorial.id}/uploads`);
@@ -108,7 +138,7 @@ export async function POST(
     const item = await prisma.collectionItem.create({
       data: {
         memorialId:   memorial.id,
-        uploadedBy:   `public:${params.token}`,
+        uploadedBy:   `public:${token}`,
         uploaderRole: 'PUBLIC',
         type:         'PHOTO',
         status:       'UNSORTED',

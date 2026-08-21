@@ -97,14 +97,14 @@ function BulkBar({
   return (
     <div style={{
       position: 'sticky', top: 52, zIndex: 40,
-      background: '#1a1a2e', borderBottom: '1px solid #c9a96e',
+      background: '#4f5d75', borderBottom: '1px solid #cdba93',
       padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
     }}>
-      <span style={{ fontSize: '0.78rem', color: '#c9a96e', fontWeight: 600 }}>
+      <span style={{ fontSize: '0.78rem', color: '#cdba93', fontWeight: 600 }}>
         {selectedIds.size} selected
       </span>
-      <button onClick={onSelectAll}  style={{ ...btnBase, background: 'transparent', border: '1px solid #8a8a9a', color: '#f5f0e8' }}>Select all {total}</button>
-      <button onClick={onClearAll}   style={{ ...btnBase, background: 'transparent', border: '1px solid #8a8a9a', color: '#8a8a9a' }}>Clear</button>
+      <button onClick={onSelectAll}  style={{ ...btnBase, background: 'transparent', border: '1px solid #98a2b3', color: '#f4f1ea' }}>Select all {total}</button>
+      <button onClick={onClearAll}   style={{ ...btnBase, background: 'transparent', border: '1px solid #98a2b3', color: '#98a2b3' }}>Clear</button>
       <div style={{ flex: 1 }} />
       <button onClick={onBulkTribute}  disabled={processing} style={{ ...btnBase, background: '#5B21B6', color: '#fff' }}>🎬 For Tribute</button>
       <button onClick={onBulkMemorial} disabled={processing} style={{ ...btnBase, background: '#0F766E', color: '#fff' }}>🖼 For Memorial</button>
@@ -160,7 +160,7 @@ function PhotoCard({
 
       {/* Hero badge */}
       {photo.isHero && (
-        <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, background: '#c9a96e', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.6rem', fontWeight: 700, color: '#fff' }}>
+        <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, background: '#cdba93', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.6rem', fontWeight: 700, color: '#fff' }}>
           HERO
         </div>
       )}
@@ -183,7 +183,7 @@ function PhotoCard({
       {/* Info + actions */}
       <div style={{ padding: '0.6rem' }}>
         {/* Uploader */}
-        <p style={{ margin: 0, fontSize: '0.7rem', color: '#8a8a9a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ margin: 0, fontSize: '0.7rem', color: '#98a2b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {photo.uploaderName ?? (photo.uploaderRole === 'STAFF' ? 'Funeral Home' : 'Guest')}
         </p>
 
@@ -198,7 +198,7 @@ function PhotoCard({
                 flex: 1, padding: '0.3rem 0', borderRadius: 4, border: 'none', fontSize: '0.65rem',
                 fontWeight: 600, cursor: 'pointer',
                 background: photo.forTribute ? '#5B21B6' : '#f3f0ea',
-                color:      photo.forTribute ? '#fff'    : '#8a8a9a',
+                color:      photo.forTribute ? '#fff'    : '#98a2b3',
               }}>
               🎬 {photo.forTribute ? 'Tribute ✓' : 'Tribute'}
             </button>
@@ -210,7 +210,7 @@ function PhotoCard({
                 flex: 1, padding: '0.3rem 0', borderRadius: 4, border: 'none', fontSize: '0.65rem',
                 fontWeight: 600, cursor: 'pointer',
                 background: photo.forMemorial ? '#0F766E' : '#f3f0ea',
-                color:      photo.forMemorial ? '#fff'    : '#8a8a9a',
+                color:      photo.forMemorial ? '#fff'    : '#98a2b3',
               }}>
               🖼 {photo.forMemorial ? 'Memorial ✓' : 'Memorial'}
             </button>
@@ -221,7 +221,7 @@ function PhotoCard({
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           {!isRejected && !photo.isHero && (
             <button onClick={() => onSetHero(photo.id)} disabled={processing}
-              style={{ flex: 1, padding: '0.25rem', borderRadius: 4, border: '1px solid #e8e4dc', background: '#fff', fontSize: '0.6rem', color: '#8a8a9a', cursor: 'pointer' }}>
+              style={{ flex: 1, padding: '0.25rem', borderRadius: 4, border: '1px solid #e8e4dc', background: '#fff', fontSize: '0.6rem', color: '#98a2b3', cursor: 'pointer' }}>
               Set Hero
             </button>
           )}
@@ -274,13 +274,13 @@ function UploadLinkBar({ uploadUrl }: { uploadUrl: string }) {
         onClick={handleCopy}
         style={{
           fontSize: '0.78rem', padding: '0.4rem 1rem', borderRadius: 6,
-          border: '1px solid #c9a96e', background: copied ? '#c9a96e' : '#fff',
+          border: '1px solid #cdba93', background: copied ? '#cdba93' : '#fff',
           color: copied ? '#fff' : '#92400E', cursor: 'pointer', fontWeight: 600, flexShrink: 0,
         }}>
         {copied ? '✓ Copied!' : 'Copy Link'}
       </button>
       <a href={uploadUrl} target="_blank" rel="noreferrer"
-        style={{ fontSize: '0.72rem', color: '#c9a96e', textDecoration: 'none', flexShrink: 0 }}>
+        style={{ fontSize: '0.72rem', color: '#cdba93', textDecoration: 'none', flexShrink: 0 }}>
         Preview ↗
       </a>
     </div>
@@ -493,8 +493,8 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <nav style={{ fontSize: '0.72rem', color: '#8a8a9a', marginBottom: '0.4rem' }}>
-              <Link href="/dashboard/memorials" style={{ color: '#8a8a9a', textDecoration: 'none' }}>← Memorials</Link>
+            <nav style={{ fontSize: '0.72rem', color: '#98a2b3', marginBottom: '0.4rem' }}>
+              <Link href="/dashboard/memorials" style={{ color: '#98a2b3', textDecoration: 'none' }}>← Memorials</Link>
               <span style={{ margin: '0 0.4rem' }}>/</span>
               <span style={{ color: '#1a1714' }}>{memorial.displayName}</span>
               <span style={{ margin: '0 0.4rem' }}>/</span>
@@ -527,11 +527,11 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
             { label: 'Unsorted',    value: counts.unsorted,    color: counts.unsorted > 0 ? '#92400E' : '#065F46' },
             { label: 'For Tribute', value: counts.forTribute,  color: '#5B21B6' },
             { label: 'For Memorial',value: counts.forMemorial, color: '#0F766E' },
-            { label: 'Rejected',    value: counts.rejected,    color: '#8a8a9a' },
+            { label: 'Rejected',    value: counts.rejected,    color: '#98a2b3' },
           ].map(s => (
             <div key={s.label} style={{ background: '#fff', borderRadius: 8, padding: '0.6rem 1rem', border: '1px solid #e8e4dc', textAlign: 'center', minWidth: 80 }}>
               <div style={{ fontSize: '1.3rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: '0.65rem', color: '#8a8a9a', marginTop: '0.2rem' }}>{s.label}</div>
+              <div style={{ fontSize: '0.65rem', color: '#98a2b3', marginTop: '0.2rem' }}>{s.label}</div>
             </div>
           ))}
           {counts.unsorted > 0 && (
@@ -547,8 +547,8 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
             <button key={tab.key} onClick={() => { setFilter(tab.key); setSelected(new Set()); }}
               style={{
                 padding: '0.55rem 1.1rem', border: 'none', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer',
-                background: filter === tab.key ? '#1a1a2e' : 'transparent',
-                color:      filter === tab.key ? '#c9a96e' : '#5a534e',
+                background: filter === tab.key ? '#4f5d75' : 'transparent',
+                color:      filter === tab.key ? '#cdba93' : '#5a534e',
                 borderRight: '1px solid #e8e4dc',
                 transition: 'background 0.15s',
               }}>
@@ -566,7 +566,7 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
         {photos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '5rem 2rem', background: '#fff', borderRadius: 12, border: '2px dashed #e8e4dc' }}>
             <p style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📭</p>
-            <p style={{ fontFamily: 'Georgia, serif', fontSize: '1rem', color: '#8a8a9a', marginBottom: '0.5rem' }}>No photos yet</p>
+            <p style={{ fontFamily: 'Georgia, serif', fontSize: '1rem', color: '#98a2b3', marginBottom: '0.5rem' }}>No photos yet</p>
             {memorial.uploadUrl && (
               <p style={{ fontSize: '0.85rem', color: '#b0a898' }}>
                 Share the upload link above with family and friends to start collecting photos.
@@ -580,14 +580,14 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
               <div key={gi} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e8e4dc', overflow: 'hidden' }}>
                 {/* Group header */}
                 <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ebe2', display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#fdfcfb' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: group.role === 'STAFF' ? '#1a1a2e' : '#c9a96e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: group.role === 'STAFF' ? '#4f5d75' : '#cdba93', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
                     {group.name[0].toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#1a1714' }}>{group.name}</p>
-                    {group.email && <p style={{ margin: 0, fontSize: '0.72rem', color: '#8a8a9a' }}>{group.email}</p>}
+                    {group.email && <p style={{ margin: 0, fontSize: '0.72rem', color: '#98a2b3' }}>{group.email}</p>}
                   </div>
-                  <span style={{ fontSize: '0.72rem', color: '#8a8a9a' }}>{group.photos.length} photo{group.photos.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#98a2b3' }}>{group.photos.length} photo{group.photos.length !== 1 ? 's' : ''}</span>
                   <button
                     onClick={() => {
                       const ids = new Set(group.photos.map(p => p.id));
@@ -618,7 +618,7 @@ export function PhotoCollectionManager({ memorial, photos: initialPhotos, upload
           // ── Grid view ──
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
             {filteredPhotos.length === 0 ? (
-              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#8a8a9a', fontSize: '0.9rem' }}>
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#98a2b3', fontSize: '0.9rem' }}>
                 No photos in this category
               </div>
             ) : (

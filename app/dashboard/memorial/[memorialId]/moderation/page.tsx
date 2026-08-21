@@ -7,23 +7,25 @@ import Link from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface ModerationPageProps {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function ModerationPage({ params }: ModerationPageProps) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   // FIXED: previously a manual `ownerId !== userId` check, which blocked
   // every org staff member except the literal creator.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: { id: true, title: true, status: true },
   });
 
@@ -41,13 +43,13 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
 
   const [pendingMemories, approvedMemories] = await Promise.all([
     prisma.memory.findMany({
-      where:   { memorialId: params.memorialId, status: MemoryStatus.PENDING },
+      where:   { memorialId: memorialId, status: MemoryStatus.PENDING },
       orderBy: { createdAt: 'desc' },
       take:    50,
       select:  memorySelect,
     }),
     prisma.memory.findMany({
-      where:   { memorialId: params.memorialId, status: MemoryStatus.APPROVED },
+      where:   { memorialId: memorialId, status: MemoryStatus.APPROVED },
       orderBy: [{ featured: 'desc' }, { createdAt: 'desc' }],
       take:    100,
       select:  memorySelect,
@@ -90,7 +92,7 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
                 <div style={{ fontSize: '0.6rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ash)', marginTop: '0.2rem' }}>Published</div>
               </div>
             </div>
-            <Link href={`/dashboard/memorial/${params.memorialId}/settings`} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
+            <Link href={`/dashboard/memorial/${memorialId}/settings`} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
               Settings →
             </Link>
           </div>
@@ -103,7 +105,7 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
             memorial={{ id: memorial.id, title: memorial.title }}
             pendingMemories={pendingMemories}
             approvedMemories={approvedMemories}
-            memorialId={params.memorialId}
+            memorialId={memorialId}
           />
         </div>
       </div>

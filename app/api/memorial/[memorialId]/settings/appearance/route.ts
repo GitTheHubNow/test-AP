@@ -24,20 +24,22 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     // Upsert — create with defaults if first visit
     const settings = await prisma.memorialSettings.upsert({
-      where:  { memorialId: params.memorialId },
-      create: { memorialId: params.memorialId },
+      where:  { memorialId: memorialId },
+      create: { memorialId: memorialId },
       update: {},
     });
 
@@ -54,18 +56,20 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: { sealed: true },
     });
 
@@ -124,8 +128,8 @@ export async function PATCH(
     if (guestBookPrompt  !== undefined) updateData.guestBookPrompt   = guestBookPrompt;
 
     const settings = await prisma.memorialSettings.upsert({
-      where:  { memorialId: params.memorialId },
-      create: { memorialId: params.memorialId, ...updateData },
+      where:  { memorialId: memorialId },
+      create: { memorialId: memorialId, ...updateData },
       update: updateData,
     });
 

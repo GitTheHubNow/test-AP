@@ -26,15 +26,17 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -43,7 +45,7 @@ export async function POST(
   // drop ownerId from the select since assertMemorialAccess now handles
   // the access decision.
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: { id: true, title: true },
   });
 
@@ -74,7 +76,7 @@ export async function POST(
     const invite = await prisma.$transaction(async (tx) => {
       const created = await tx.collectionInvite.create({
         data: {
-          memorialId:    params.memorialId,
+          memorialId:    memorialId,
           createdBy:     userId,
           token,
           recipientName,
@@ -93,7 +95,7 @@ export async function POST(
           actorRole:  ActorRole.OWNER,
           reasonCode: ReasonCode.CREATION,
           metadata: {
-            memorialId:    params.memorialId,
+            memorialId:    memorialId,
             recipientName,
             recipientEmail,
             expiresAt,
@@ -115,7 +117,7 @@ export async function POST(
           <p>Hi ${recipientName ?? 'there'},</p>
           <p>You've been invited to upload photos and memories for <strong>${memorial.title}</strong>'s memorial.</p>
           <p>
-            <a href="${inviteUrl}" style="background:#c9a96e;color:#0a0a16;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">
+            <a href="${inviteUrl}" style="background:#cdba93;color:#4f5d75;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">
               Upload Photos
             </a>
           </p>
@@ -157,15 +159,17 @@ export async function POST(
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -173,7 +177,7 @@ export async function GET(
   // Auto-expire any invites that have passed expiresAt
   await prisma.collectionInvite.updateMany({
     where: {
-      memorialId: params.memorialId,
+      memorialId: memorialId,
       status:     CollectionInviteStatus.PENDING,
       expiresAt:  { lt: new Date() },
     },
@@ -181,7 +185,7 @@ export async function GET(
   });
 
   const invites = await prisma.collectionInvite.findMany({
-    where:   { memorialId: params.memorialId },
+    where:   { memorialId: memorialId },
     orderBy: { createdAt: 'desc' },
     select: {
       id:            true,

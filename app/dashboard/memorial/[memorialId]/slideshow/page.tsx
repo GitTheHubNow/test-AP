@@ -18,10 +18,12 @@ import Link                   from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function SlideshowDashboardPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -29,13 +31,13 @@ export default async function SlideshowDashboardPage({ params }: Props) {
   // every org staff member except the literal creator. This is a
   // read-only launcher page, so 'read' is the right permission level.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       title:         true,
@@ -68,7 +70,7 @@ export default async function SlideshowDashboardPage({ params }: Props) {
   // Count approved forTribute photos
   const photoCount = await prisma.collectionItem.count({
     where: {
-      memorialId: params.memorialId,
+      memorialId: memorialId,
       type:       'PHOTO',
       forTribute: true,
       status:     'APPROVED',
@@ -76,7 +78,7 @@ export default async function SlideshowDashboardPage({ params }: Props) {
   });
 
   const track = memorial.tributeVideo?.musicTrack ?? null;
-  const slideshowUrl = `/slideshow/${params.memorialId}`;
+  const slideshowUrl = `/slideshow/${memorialId}`;
 
   return (
     <div style={styles.page}>
@@ -85,10 +87,10 @@ export default async function SlideshowDashboardPage({ params }: Props) {
         {/* ── Header ── */}
         <div style={styles.header}>
           <div style={styles.iconWrap}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9a96e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cdba93" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/>
               <path d="M8 21h8M12 17v4"/>
-              <polygon points="10,8 16,11 10,14" fill="#c9a96e" stroke="none"/>
+              <polygon points="10,8 16,11 10,14" fill="#cdba93" stroke="none"/>
             </svg>
           </div>
           <div>
@@ -141,7 +143,7 @@ export default async function SlideshowDashboardPage({ params }: Props) {
               Go to the Collection workspace and mark photos as "For Tribute" to include them.
             </p>
             <Link
-              href={`/dashboard/memorial/${params.memorialId}/collection`}
+              href={`/dashboard/memorial/${memorialId}/collection`}
               style={styles.linkBtn}
             >
               Open Collection →
@@ -187,13 +189,13 @@ export default async function SlideshowDashboardPage({ params }: Props) {
         {/* ── Footer links ── */}
         <div style={styles.footer}>
           <Link
-            href={`/dashboard/memorial/${params.memorialId}/collection`}
+            href={`/dashboard/memorial/${memorialId}/collection`}
             style={styles.footerLink}
           >
             ← Manage photos (Collection)
           </Link>
           <Link
-            href={`/dashboard/memorial/${params.memorialId}/video`}
+            href={`/dashboard/memorial/${memorialId}/video`}
             style={styles.footerLink}
           >
             ← Change music (Tribute Video)
@@ -233,7 +235,7 @@ const styles: Record<string, React.CSSProperties> = {
   iconWrap: {
     width:           '52px',
     height:          '52px',
-    background:      '#0a0a16',
+    background:      '#4f5d75',
     borderRadius:    '10px',
     display:         'flex',
     alignItems:      'center',
@@ -244,7 +246,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:      0,
     fontSize:    '1.3rem',
     fontWeight:  600,
-    color:       '#0a0a16',
+    color:       '#4f5d75',
     fontFamily:  'system-ui, sans-serif',
     lineHeight:  1.2,
   },
@@ -286,7 +288,7 @@ const styles: Record<string, React.CSSProperties> = {
   statNum: {
     fontSize:   '1.5rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
     lineHeight: 1,
   },
@@ -317,7 +319,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'system-ui, sans-serif',
   },
   linkBtn: {
-    color:          '#c9a96e',
+    color:          '#cdba93',
     fontSize:       '0.85rem',
     fontFamily:     'system-ui, sans-serif',
     fontWeight:     600,
@@ -326,7 +328,7 @@ const styles: Record<string, React.CSSProperties> = {
   openBtn: {
     display:         'block',
     width:           '100%',
-    background:      '#0a0a16',
+    background:      '#4f5d75',
     color:           '#f0ece4',
     border:          'none',
     borderRadius:    '8px',
@@ -373,7 +375,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding:      '0.15em 0.45em',
     fontSize:     '0.75rem',
     fontFamily:   'monospace',
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     whiteSpace:   'nowrap',
     flexShrink:   0,
   },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { SignUp } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,18 @@ interface InviteInfo {
  *      gets a chance to auto-create a personal org first.
  *   4. On success, redirect to /dashboard.
  */
-export default function InviteAcceptPage({ params }: { params: { token: string } }) {
+export default function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
+  // This is a Client Component ('use client' at the top of this file),
+  // so it can't be an async function — React doesn't support that.
+  // Next.js still passes params as a Promise here (the async-params
+  // change applies to Server Components AND to props threaded down
+  // into Client Components), so the correct way to unwrap it in a
+  // Client Component is React's use() hook, not await.
+  // (First pass at this migration used `await params` here, copying
+  // the Server Component pattern used everywhere else in the app —
+  // that doesn't work in a client component and fails to compile.)
+  const { token } = use(params);
+
   const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
 
@@ -42,7 +53,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
 
   // Step 1 — load invite info, works pre-auth.
   useEffect(() => {
-    fetch(`/api/org/invite/${params.token}`)
+    fetch(`/api/org/invite/${token}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) {
@@ -52,7 +63,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
         setInvite(json.data);
       })
       .catch(() => setLoadError('Failed to load invite details.'));
-  }, [params.token]);
+  }, [token]);
 
   // Step 3 — once signed in, accept immediately (once, not on every
   // render — hasAttemptedAccept guards against re-firing on re-renders
@@ -63,7 +74,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
     setHasAttemptedAccept(true);
     setAccepting(true);
 
-    fetch(`/api/org/invite/${params.token}/accept`, { method: 'POST' })
+    fetch(`/api/org/invite/${token}/accept`, { method: 'POST' })
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json.success) {
@@ -80,7 +91,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
         setAcceptError('Failed to accept invite. Please try again.');
         setAccepting(false);
       });
-  }, [isLoaded, isSignedIn, invite, hasAttemptedAccept, params.token]);
+  }, [isLoaded, isSignedIn, invite, hasAttemptedAccept, token]);
 
   if (loadError) {
     return (
@@ -141,7 +152,7 @@ export default function InviteAcceptPage({ params }: { params: { token: string }
         </div>
         <SignUp
           initialValues={{ emailAddress: invite.email }}
-          forceRedirectUrl={`/invite/${params.token}`}
+          forceRedirectUrl={`/invite/${token}`}
           appearance={{
             elements: {
               rootBox: 'mx-auto',

@@ -145,7 +145,7 @@ const inputBase: React.CSSProperties = {
   borderRadius: '6px',
   fontSize:     '0.9rem',
   fontFamily:   'system-ui, sans-serif',
-  color:        '#0a0a16',
+  color:        '#4f5d75',
   background:   '#fff',
   boxSizing:    'border-box',
   outline:      'none',
@@ -156,7 +156,7 @@ const input:    React.CSSProperties = { ...inputBase, width: '120px' };
 const textarea: React.CSSProperties = { ...inputBase, resize: 'vertical', lineHeight: 1.5 };
 
 const btn: React.CSSProperties = {
-  background:    '#0a0a16',
+  background:    '#4f5d75',
   color:         '#f0ece4',
   border:        'none',
   borderRadius:  '7px',

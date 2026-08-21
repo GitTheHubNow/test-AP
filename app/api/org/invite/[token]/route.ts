@@ -13,46 +13,53 @@ import { checkRateLimit } from '@/lib/rateLimit';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } },
+  { params }: { params: Promise<{ token: string }> },
 ) {
+  const { token } = await params;
+
   // Enumerable (any guessed/leaked token reveals org name + invited
   // email) — legitimate traffic is one page load, so keep this tight.
-  const limited = await checkRateLimit(request, `org-invite-info:${params.token}`, { max: 15, windowMs: 60 * 1000 });
+  const limited = await checkRateLimit(request, `org-invite-info:${token}`, { max: 15, windowMs: 60 * 1000 });
   if (limited) return limited;
 
-  const invite = await prisma.orgInvite.findUnique({
-    where:  { token: params.token },
-    select: {
-      email:     true,
-      role:      true,
-      status:    true,
-      expiresAt: true,
-      organisation: { select: { name: true } },
-    },
-  });
-
-  if (!invite) {
-    return NextResponse.json({ success: false, error: 'Invite not found' }, { status: 404 });
-  }
-
-  const isExpired = invite.expiresAt < new Date();
-
-  if (invite.status !== OrgInviteStatus.PENDING || isExpired) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: isExpired ? 'This invite has expired' : `This invite is no longer valid (${invite.status.toLowerCase()})`,
+  try {
+    const invite = await prisma.orgInvite.findUnique({
+      where:  { token: token },
+      select: {
+        email:     true,
+        role:      true,
+        status:    true,
+        expiresAt: true,
+        organisation: { select: { name: true } },
       },
-      { status: 410 }, // Gone
-    );
-  }
+    });
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      orgName: invite.organisation.name,
-      email:   invite.email,
-      role:    invite.role,
-    },
-  });
+    if (!invite) {
+      return NextResponse.json({ success: false, error: 'Invite not found' }, { status: 404 });
+    }
+
+    const isExpired = invite.expiresAt < new Date();
+
+    if (invite.status !== OrgInviteStatus.PENDING || isExpired) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: isExpired ? 'This invite has expired' : `This invite is no longer valid (${invite.status.toLowerCase()})`,
+        },
+        { status: 410 }, // Gone
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        orgName: invite.organisation.name,
+        email:   invite.email,
+        role:    invite.role,
+      },
+    });
+  } catch (err) {
+    console.error('[org/invite/info] Unexpected error:', err);
+    return NextResponse.json({ success: false, error: 'Failed to look up invite' }, { status: 500 });
+  }
 }

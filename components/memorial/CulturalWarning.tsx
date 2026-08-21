@@ -45,20 +45,20 @@ export function CulturalWarning({ displayName, flags, memorial }: Props) {
       <div style={{ maxWidth: 520, width: '100%', position: 'relative', zIndex: 1, textAlign: 'center' }}>
 
         {/* Ochre rule */}
-        <div style={{ width: 40, height: 3, background: '#c9a96e', margin: '0 auto 2rem', borderRadius: 2 }} />
+        <div style={{ width: 40, height: 3, background: '#cdba93', margin: '0 auto 2rem', borderRadius: 2 }} />
 
-        <p style={{ fontSize: '0.65rem', letterSpacing: '0.3em', textTransform: 'uppercase', color: '#c9a96e', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '0.65rem', letterSpacing: '0.3em', textTransform: 'uppercase', color: '#cdba93', marginBottom: '1.5rem' }}>
           Cultural Advisory
         </p>
 
-        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', fontWeight: 400, color: '#f5f0e8', lineHeight: 1.2, marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', fontWeight: 400, color: '#f4f1ea', lineHeight: 1.2, marginBottom: '1.5rem' }}>
           In Memory of<br />
           <span style={{ fontStyle: 'italic' }}>{displayName}</span>
         </h1>
 
         <div style={{ width: '100%', height: '1px', background: 'linear-gradient(90deg, transparent, rgba(201,169,110,0.4), transparent)', margin: '0 0 1.75rem' }} />
 
-        <p style={{ fontSize: '1rem', color: '#c9a96e', lineHeight: 1.8, marginBottom: '1.25rem' }}>
+        <p style={{ fontSize: '1rem', color: '#cdba93', lineHeight: 1.8, marginBottom: '1.25rem' }}>
           This memorial contains images and content of a deceased{' '}
           <strong style={{ color: '#e8d5a3' }}>{groupText}</strong> person.
         </p>
@@ -74,8 +74,8 @@ export function CulturalWarning({ displayName, flags, memorial }: Props) {
           style={{
             padding: '0.875rem 2.5rem',
             background: 'transparent',
-            border: '1px solid #c9a96e',
-            color: '#c9a96e',
+            border: '1px solid #cdba93',
+            color: '#cdba93',
             fontFamily: 'Georgia, serif',
             fontSize: '0.9rem',
             letterSpacing: '0.08em',
@@ -84,12 +84,12 @@ export function CulturalWarning({ displayName, flags, memorial }: Props) {
             transition: 'all 0.2s',
           }}
           onMouseEnter={e => {
-            (e.target as HTMLButtonElement).style.background = '#c9a96e';
+            (e.target as HTMLButtonElement).style.background = '#cdba93';
             (e.target as HTMLButtonElement).style.color = '#1a1208';
           }}
           onMouseLeave={e => {
             (e.target as HTMLButtonElement).style.background = 'transparent';
-            (e.target as HTMLButtonElement).style.color = '#c9a96e';
+            (e.target as HTMLButtonElement).style.color = '#cdba93';
           }}
         >
           I understand — continue

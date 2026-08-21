@@ -16,8 +16,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string; photoId: string } }
+  { params }: { params: Promise<{ memorialId: string; photoId: string }> }
 ) {
+  const { memorialId, photoId } = await params;
+
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
 
@@ -25,17 +27,17 @@ export async function PATCH(
   // wrapped) — assertMemorialAccess throws, so catch it right here rather
   // than letting it become an unhandled rejection.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const item = await prisma.collectionItem.findUnique({
-    where:  { id: params.photoId },
+    where:  { id: photoId },
     select: { id: true, memorialId: true },
   });
 
-  if (!item || item.memorialId !== params.memorialId) {
+  if (!item || item.memorialId !== memorialId) {
     return NextResponse.json({ success: false, error: 'Photo not found' }, { status: 404 });
   }
 
@@ -57,14 +59,14 @@ export async function PATCH(
       // If setting isHero, clear all others first
       if (body.isHero === true) {
         await tx.collectionItem.updateMany({
-          where: { memorialId: params.memorialId, isHero: true },
+          where: { memorialId: memorialId, isHero: true },
           data:  { isHero: false },
         });
         // Also update hero image key on memorial
       }
 
       await tx.collectionItem.update({
-        where: { id: params.photoId },
+        where: { id: photoId },
         data: {
           ...(body.status      !== undefined ? { status:      body.status      as any } : {}),
           ...(body.forTribute  !== undefined ? { forTribute:  body.forTribute  } : {}),
@@ -81,12 +83,12 @@ export async function PATCH(
       // Sync hero image key on memorial
       if (body.isHero === true) {
         const photo = await tx.collectionItem.findUnique({
-          where:  { id: params.photoId },
+          where:  { id: photoId },
           select: { blobKey: true },
         });
         if (photo?.blobKey) {
           await tx.memorial.update({
-            where: { id: params.memorialId },
+            where: { id: memorialId },
             data:  { heroImageKey: photo.blobKey },
           });
         }

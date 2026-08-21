@@ -7,8 +7,10 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
 
   if (!userId) {
@@ -20,7 +22,7 @@ export async function GET(
 
   // FIXED: previously a manual ownerId check that blocked org staff.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -28,14 +30,14 @@ export async function GET(
   try {
     const auditExport = await generateEntityAuditExport(
       EntityType.MEMORIAL,
-      params.memorialId
+      memorialId
     );
 
     return new NextResponse(JSON.stringify(auditExport, null, 2), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="memorial-${params.memorialId}-audit.json"`,
+        'Content-Disposition': `attachment; filename="memorial-${memorialId}-audit.json"`,
       },
     });
   } catch (error: any) {

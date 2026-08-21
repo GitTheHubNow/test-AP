@@ -27,21 +27,23 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: { id: true, title: true, workflowStage: true },
   });
 
@@ -92,7 +94,7 @@ export async function POST(
   try {
     // Upsert — one handover per memorial
     const existing = await prisma.memorialHandover.findUnique({
-      where:  { memorialId: params.memorialId },
+      where:  { memorialId: memorialId },
       select: { id: true, status: true },
     });
 
@@ -103,7 +105,7 @@ export async function POST(
     const handover = await prisma.$transaction(async (tx) => {
       const record = existing
         ? await tx.memorialHandover.update({
-            where: { memorialId: params.memorialId },
+            where: { memorialId: memorialId },
             data: {
               initiatedBy:          userId,
               status,
@@ -123,7 +125,7 @@ export async function POST(
           })
         : await tx.memorialHandover.create({
             data: {
-              memorialId:           params.memorialId,
+              memorialId:           memorialId,
               initiatedBy:          userId,
               status,
               familyContactName:    body.familyContactName.trim(),
@@ -145,7 +147,7 @@ export async function POST(
           actorRole:  ActorRole.OWNER,
           reasonCode: ReasonCode.HANDOVER,
           metadata: {
-            memorialId:         params.memorialId,
+            memorialId:         memorialId,
             familyContactEmail: body.familyContactEmail.trim(),
             scheduledAt:        scheduledAt?.toISOString() ?? null,
             status,
@@ -168,7 +170,7 @@ export async function POST(
       await sendHandoverInitiated({
         familyEmail:       body.familyContactEmail.trim(),
         familyContactName: body.familyContactName?.trim() ?? 'there',
-        memorialId:        params.memorialId,
+        memorialId:        memorialId,
         memorialTitle:     memorial.title,
         funeralHomeName:   org?.name ?? 'the funeral home',
         acceptToken,
@@ -206,21 +208,23 @@ export async function POST(
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const handover = await prisma.memorialHandover.findUnique({
-    where:  { memorialId: params.memorialId },
+    where:  { memorialId: memorialId },
     select: {
       id:                   true,
       status:               true,
@@ -274,21 +278,23 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const handover = await prisma.memorialHandover.findUnique({
-    where:  { memorialId: params.memorialId },
+    where:  { memorialId },
     select: { id: true, status: true },
   });
 
@@ -321,7 +327,7 @@ export async function DELETE(
         actorId:    userId,
         actorRole:  ActorRole.OWNER,
         reasonCode: ReasonCode.HANDOVER,
-        metadata:   { memorialId: params.memorialId, cancelReason: body.cancelReason ?? null },
+        metadata:   { memorialId, cancelReason: body.cancelReason ?? null },
       },
     });
   });

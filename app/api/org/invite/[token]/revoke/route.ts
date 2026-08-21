@@ -24,45 +24,52 @@ import { getOrgContextForUser } from '@/lib/auth/getOrgForUser';
 
 export async function PATCH(
   _request: NextRequest,
-  { params }: { params: { token: string } },
+  { params }: { params: Promise<{ token: string }> },
 ) {
+  const { token } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
-  const ctx = await getOrgContextForUser(userId);
-  if (!ctx) {
-    return NextResponse.json({ success: false, error: 'No organisation found' }, { status: 403 });
+  try {
+    const ctx = await getOrgContextForUser(userId);
+    if (!ctx) {
+      return NextResponse.json({ success: false, error: 'No organisation found' }, { status: 403 });
+    }
+
+    if (ctx.role !== OrgRole.OWNER && ctx.role !== OrgRole.ADMIN) {
+      return NextResponse.json(
+        { success: false, error: 'Only owners and admins can revoke invites' },
+        { status: 403 },
+      );
+    }
+
+    const invite = await prisma.orgInvite.findUnique({
+      where:  { token: token },
+      select: { id: true, organisationId: true, status: true },
+    });
+
+    if (!invite || invite.organisationId !== ctx.organisationId) {
+      return NextResponse.json({ success: false, error: 'Invite not found' }, { status: 404 });
+    }
+
+    if (invite.status !== OrgInviteStatus.PENDING) {
+      return NextResponse.json(
+        { success: false, error: `Cannot revoke invite with status: ${invite.status}` },
+        { status: 409 },
+      );
+    }
+
+    await prisma.orgInvite.update({
+      where: { id: invite.id },
+      data:  { status: OrgInviteStatus.REVOKED },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('[org/invite/revoke] Unexpected error:', err);
+    return NextResponse.json({ success: false, error: 'Failed to revoke invite' }, { status: 500 });
   }
-
-  if (ctx.role !== OrgRole.OWNER && ctx.role !== OrgRole.ADMIN) {
-    return NextResponse.json(
-      { success: false, error: 'Only owners and admins can revoke invites' },
-      { status: 403 },
-    );
-  }
-
-  const invite = await prisma.orgInvite.findUnique({
-    where:  { token: params.token },
-    select: { id: true, organisationId: true, status: true },
-  });
-
-  if (!invite || invite.organisationId !== ctx.organisationId) {
-    return NextResponse.json({ success: false, error: 'Invite not found' }, { status: 404 });
-  }
-
-  if (invite.status !== OrgInviteStatus.PENDING) {
-    return NextResponse.json(
-      { success: false, error: `Cannot revoke invite with status: ${invite.status}` },
-      { status: 409 },
-    );
-  }
-
-  await prisma.orgInvite.update({
-    where: { id: invite.id },
-    data:  { status: OrgInviteStatus.REVOKED },
-  });
-
-  return NextResponse.json({ success: true });
 }

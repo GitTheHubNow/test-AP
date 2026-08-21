@@ -3,6 +3,9 @@ import { runSendAfterDaysJob }  from '@/lib/jobs/job-send-after-days';
 import { runExpiryWarningJob }  from '@/lib/jobs/job-expiry-warning';
 import { runExpiryEnforceJob }  from '@/lib/jobs/job-expiry-enforce';
 import { runStaleMemoriesJob }  from '@/lib/jobs/job-stale-memories';
+import { runLastChanceUploadJob, runPublishPromptJob } from '@/lib/jobs/job-journey-automation';
+import { runAutoHandoverJob } from '@/lib/jobs/job-auto-handover';
+import { isValidCronSecret } from '@/lib/timingSafe';
 
 /**
  * POST /api/cron/run
@@ -27,9 +30,7 @@ import { runStaleMemoriesJob }  from '@/lib/jobs/job-stale-memories';
  */
 export async function POST(request: NextRequest) {
   // ── Auth ────────────────────────────────────────────────────────────────
-  const secret = process.env.CRON_SECRET;
-
-  if (!secret) {
+  if (!process.env.CRON_SECRET) {
     console.error('[cron] CRON_SECRET env var not set');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
@@ -37,7 +38,10 @@ export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   const token      = authHeader?.replace('Bearer ', '').trim();
 
-  if (token !== secret) {
+  // Constant-time comparison (see lib/cronAuth.ts) — was a plain !==
+  // string comparison, which is a (low-severity, but free-to-fix)
+  // timing side channel on a bearer-token check.
+  if (!isValidCronSecret(token)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -81,6 +85,36 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     results.staleMemories = { error: err instanceof Error ? err.message : String(err) };
     console.error('[cron] staleMemories failed:', err);
+  }
+
+  // Job 5: Last chance to upload — ~5 days before the service, to family
+  try {
+    results.lastChanceUpload = await runLastChanceUploadJob();
+    console.log('[cron] lastChanceUpload complete:', results.lastChanceUpload);
+  } catch (err) {
+    results.lastChanceUpload = { error: err instanceof Error ? err.message : String(err) };
+    console.error('[cron] lastChanceUpload failed:', err);
+  }
+
+  // Job 6: Ready to publish — day before the service, to funeral home staff
+  try {
+    results.publishPrompt = await runPublishPromptJob();
+    console.log('[cron] publishPrompt complete:', results.publishPrompt);
+  } catch (err) {
+    results.publishPrompt = { error: err instanceof Error ? err.message : String(err) };
+    console.error('[cron] publishPrompt failed:', err);
+  }
+
+  // Job 7: Auto-initiate handover — X days after the service, invites the
+  // family on file to accept ownership (they must still click to accept —
+  // see lib/jobs/job-auto-handover.ts for why this stays a click, not a
+  // silent transfer)
+  try {
+    results.autoHandover = await runAutoHandoverJob();
+    console.log('[cron] autoHandover complete:', results.autoHandover);
+  } catch (err) {
+    results.autoHandover = { error: err instanceof Error ? err.message : String(err) };
+    console.error('[cron] autoHandover failed:', err);
   }
 
   const finishedAt  = new Date();

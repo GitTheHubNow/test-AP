@@ -16,23 +16,25 @@ import { prisma }                     from '@/lib/prisma';
 import { assertMemorialAccess, assertFeatureEnabled } from '@/lib/tenant';
 import { handleAuthError } from '@/lib/errors';
 
-type Params = { params: { id: string; requestId: string } };
+type Params = { params: Promise<{ id: string; requestId: string }> };
 
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const { id, requestId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.id, userId);
+    await assertMemorialAccess(id, userId);
     await assertFeatureEnabled(userId, 'products');
 
     // Verify the request belongs to this memorial
     const existing = await prisma.productRequest.findFirst({
-      where: { id: params.requestId, memorialId: params.id },
+      where: { id: requestId, memorialId: id },
       select: { id: true, status: true },
     });
     if (!existing) {
@@ -44,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     catch { return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 }); }
 
     const updated = await prisma.productRequest.update({
-      where: { id: params.requestId },
+      where: { id: requestId },
       data: {
         ...(body.requestNotes !== undefined ? { requestNotes: body.requestNotes } : {}),
       },
@@ -60,17 +62,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // ── DELETE ────────────────────────────────────────────────────────────────────
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const { id, requestId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.id, userId);
+    await assertMemorialAccess(id, userId);
     await assertFeatureEnabled(userId, 'products');
 
     const existing = await prisma.productRequest.findFirst({
-      where: { id: params.requestId, memorialId: params.id },
+      where: { id: requestId, memorialId: id },
       select: { id: true, status: true },
     });
     if (!existing) {
@@ -86,7 +90,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       );
     }
 
-    await prisma.productRequest.delete({ where: { id: params.requestId } });
+    await prisma.productRequest.delete({ where: { id: requestId } });
 
     return NextResponse.json({ success: true, data: { deleted: true } });
 

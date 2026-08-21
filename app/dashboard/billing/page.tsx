@@ -3,94 +3,41 @@
 /**
  * app/dashboard/billing/page.tsx
  *
- * Shows current plan, usage bars, upgrade/manage buttons.
+ * CHANGED — was a 3-tier plan-comparison page (Starter/Professional/
+ * Enterprise cards, feature checkmarks, usage-limit bars, "switch plan"
+ * buttons). Under the new base + per-memorial-metered pricing model
+ * there's one plan for everyone, so all of that is gone. Replaced with:
+ * subscription status, this month's running total, and the manage/
+ * cancel button (unchanged — still goes through the Stripe portal).
+ *
  * Reads from GET /api/billing/status.
- * Upgrade → POST /api/billing/checkout → redirect to Stripe.
+ * Start subscription → POST /api/billing/checkout → redirect to Stripe.
  * Manage → POST /api/billing/portal → redirect to Stripe portal.
  */
 
 import { useEffect, useState } from 'react';
-import { useRouter }           from 'next/navigation';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Plan = 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
 type SubStatus = 'NONE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'INCOMPLETE';
 
 interface BillingStatus {
-  plan:               Plan;
-  planDisplay:        { name: string; priceAud: number; description: string };
   subscriptionStatus: SubStatus;
   currentPeriodEnd:   string | null;
   cancelAtPeriodEnd:  boolean;
   trialEndsAt:        string | null;
-  usage: {
-    memorialsThisMonth: number;
-    videosThisMonth:    number;
-    memorialLimit:      number;
-    videoLimit:         number;
+  billing: {
+    baseFeeAud:     number;
+    perMemorialAud: number;
   };
-  features: {
-    guestBook:      boolean;
-    analytics:      boolean;
-    customBranding: boolean;
-    apiAccess:      boolean;
+  usage: {
+    memorialsThisMonth:         number;
+    videosThisMonth:            number;
+    estimatedMemorialChargeAud: number;
   };
 }
-
-// ── Plan cards config ─────────────────────────────────────────────────────────
-
-const PLANS: { plan: Plan; name: string; price: number; description: string; features: string[] }[] = [
-  {
-    plan:        'STARTER',
-    name:        'Starter',
-    price:       49,
-    description: 'For individual funeral directors',
-    features: [
-      '10 memorials per month',
-      '3 tribute videos per month',
-      'Basic QR codes',
-      '1 team seat',
-      '200 MB storage per memorial',
-    ],
-  },
-  {
-    plan:        'PROFESSIONAL',
-    name:        'Professional',
-    price:       99,
-    description: 'For busy funeral homes',
-    features: [
-      'Unlimited memorials',
-      'Unlimited tribute videos',
-      'Guest book',
-      'Analytics dashboard',
-      '3 team seats',
-      '1 GB storage per memorial',
-    ],
-  },
-  {
-    plan:        'ENTERPRISE',
-    name:        'Enterprise',
-    price:       249,
-    description: 'For multi-location groups',
-    features: [
-      'Everything in Professional',
-      'Custom branding & domain',
-      'API access',
-      'Unlimited team seats',
-      '5 GB storage per memorial',
-      'Priority support',
-    ],
-  },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function usagePercent(used: number, limit: number): number {
-  if (limit === -1) return 0; // unlimited
-  if (limit === 0)  return 100;
-  return Math.min(100, Math.round((used / limit) * 100));
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -103,17 +50,16 @@ function statusBadge(status: SubStatus): { label: string; color: string; bg: str
     case 'PAST_DUE':   return { label: 'Past due',   color: '#b45309', bg: '#fef3c7' };
     case 'CANCELED':   return { label: 'Cancelled',  color: '#dc2626', bg: '#fee2e2' };
     case 'INCOMPLETE': return { label: 'Incomplete', color: '#7c3aed', bg: '#ede9fe' };
-    default:           return { label: 'Free tier',  color: '#475569', bg: '#f1f5f9' };
+    default:           return { label: 'No subscription', color: '#475569', bg: '#f1f5f9' };
   }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const router = useRouter();
   const [status,    setStatus]    = useState<BillingStatus | null>(null);
   const [loading,   setLoading]   = useState(true);
-  const [upgrading, setUpgrading] = useState<Plan | null>(null);
+  const [starting,  setStarting]  = useState(false);
   const [managing,  setManaging]  = useState(false);
   const [error,     setError]     = useState<string | null>(null);
 
@@ -125,14 +71,14 @@ export default function BillingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleUpgrade(plan: Plan) {
-    setUpgrading(plan);
+  async function handleStartSubscription() {
+    setStarting(true);
     setError(null);
     try {
       const res  = await fetch('/api/billing/checkout', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ plan }),
+        body:    JSON.stringify({}),
       });
       const data = await res.json();
       if (!data.success) { setError(data.error); return; }
@@ -140,7 +86,7 @@ export default function BillingPage() {
     } catch {
       setError('Failed to start checkout. Please try again.');
     } finally {
-      setUpgrading(null);
+      setStarting(false);
     }
   }
 
@@ -173,6 +119,7 @@ export default function BillingPage() {
   }
 
   const badge = statusBadge(status?.subscriptionStatus ?? 'NONE');
+  const hasSubscription = status?.subscriptionStatus === 'ACTIVE' || status?.subscriptionStatus === 'PAST_DUE';
 
   return (
     <div style={s.page}>
@@ -181,9 +128,9 @@ export default function BillingPage() {
       <div style={s.header}>
         <div>
           <h1 style={s.title}>Billing</h1>
-          <p style={s.subtitle}>Manage your plan and usage</p>
+          <p style={s.subtitle}>Manage your subscription and usage</p>
         </div>
-        {status?.subscriptionStatus === 'ACTIVE' || status?.subscriptionStatus === 'PAST_DUE' ? (
+        {hasSubscription && (
           <button
             style={{ ...s.btnSecondary, opacity: managing ? 0.6 : 1 }}
             onClick={handleManage}
@@ -191,7 +138,7 @@ export default function BillingPage() {
           >
             {managing ? 'Opening…' : 'Manage subscription'}
           </button>
-        ) : null}
+        )}
       </div>
 
       {/* Error */}
@@ -201,7 +148,7 @@ export default function BillingPage() {
       {status?.trialEndsAt && new Date(status.trialEndsAt) > new Date() && (
         <div style={s.trialBanner}>
           <span style={s.trialIcon}>🎉</span>
-          <span>Your 14-day free trial ends on <strong>{formatDate(status.trialEndsAt)}</strong>. No charge until then.</span>
+          <span>Your free trial ends on <strong>{formatDate(status.trialEndsAt)}</strong>. No charge until then.</span>
         </div>
       )}
 
@@ -217,17 +164,34 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Current plan card */}
-      {status && (
+      {/* No subscription yet — prompt to start */}
+      {!hasSubscription && status?.subscriptionStatus !== 'INCOMPLETE' && (
+        <div style={s.startCard}>
+          <h2 style={s.sectionTitle}>Start your subscription</h2>
+          <p style={s.startDesc}>{`\$${status?.billing.baseFeeAud ?? 99}/month base fee, plus \$${status?.billing.perMemorialAud ?? 199} per memorial you create. No charge until your trial ends.`}</p>
+          <button
+            style={{ ...s.startBtn, opacity: starting ? 0.6 : 1 }}
+            onClick={handleStartSubscription}
+            disabled={starting}
+          >
+            {starting ? 'Redirecting…' : 'Add payment method'}
+          </button>
+        </div>
+      )}
+
+      {/* Current subscription card */}
+      {status && hasSubscription && (
         <div style={s.currentPlanCard}>
           <div style={s.currentPlanLeft}>
             <div style={s.currentPlanHeader}>
-              <span style={s.currentPlanName}>{status.planDisplay.name}</span>
+              <span style={s.currentPlanName}>Absolute Posterity subscription</span>
               <span style={{ ...s.statusBadge, color: badge.color, background: badge.bg }}>
                 {badge.label}
               </span>
             </div>
-            <p style={s.currentPlanDesc}>{status.planDisplay.description}</p>
+            <p style={s.currentPlanDesc}>
+              ${status.billing.baseFeeAud}/month base fee, plus ${status.billing.perMemorialAud} per memorial
+            </p>
             {status.currentPeriodEnd && (
               <p style={s.renewalText}>
                 {status.cancelAtPeriodEnd
@@ -237,150 +201,46 @@ export default function BillingPage() {
               </p>
             )}
           </div>
-          <div style={s.currentPlanPrice}>
-            <span style={s.priceAmount}>${status.planDisplay.priceAud}</span>
-            <span style={s.priceFreq}>/month</span>
-          </div>
         </div>
       )}
 
-      {/* Usage */}
-      {status && (
+      {/* This month's usage + running total */}
+      {status && hasSubscription && (
         <div style={s.usageCard}>
-          <h2 style={s.sectionTitle}>This month's usage</h2>
-          <div style={s.usageGrid}>
-            <UsageBar
-              label="Memorials"
-              used={status.usage.memorialsThisMonth}
-              limit={status.usage.memorialLimit}
-            />
-            <UsageBar
-              label="Tribute videos"
-              used={status.usage.videosThisMonth}
-              limit={status.usage.videoLimit}
-            />
+          <h2 style={s.sectionTitle}>This month</h2>
+          <div style={s.usageRow}>
+            <span style={s.usageRowLabel}>Memorials created</span>
+            <span style={s.usageRowValue}>{status.usage.memorialsThisMonth}</span>
           </div>
-          <p style={s.usageResetNote}>Counters reset on the 1st of each month.</p>
-        </div>
-      )}
-
-      {/* Features */}
-      {status && (
-        <div style={s.featuresCard}>
-          <h2 style={s.sectionTitle}>Features on your plan</h2>
-          <div style={s.featureGrid}>
-            {([
-              { label: 'Guest book',      enabled: status.features.guestBook      },
-              { label: 'Analytics',       enabled: status.features.analytics      },
-              { label: 'Custom branding', enabled: status.features.customBranding },
-              { label: 'API access',      enabled: status.features.apiAccess      },
-            ] as const).map(({ label, enabled }) => (
-              <div key={label} style={s.featureRow}>
-                <span style={{ ...s.featureIcon, color: enabled ? '#15803d' : '#94a3b8' }}>
-                  {enabled ? '✓' : '—'}
-                </span>
-                <span style={{ ...s.featureLabel, color: enabled ? '#1e293b' : '#94a3b8' }}>
-                  {label}
-                </span>
-              </div>
-            ))}
+          <div style={s.usageRow}>
+            <span style={s.usageRowLabel}>Tribute videos created</span>
+            <span style={s.usageRowValue}>{status.usage.videosThisMonth}</span>
           </div>
+          <div style={s.usageDivider} />
+          <div style={s.usageRow}>
+            <span style={s.usageRowLabelTotal}>Base fee</span>
+            <span style={s.usageRowValueTotal}>${status.billing.baseFeeAud}</span>
+          </div>
+          <div style={s.usageRow}>
+            <span style={s.usageRowLabelTotal}>
+              Memorials ({status.usage.memorialsThisMonth} × ${status.billing.perMemorialAud})
+            </span>
+            <span style={s.usageRowValueTotal}>${status.usage.estimatedMemorialChargeAud}</span>
+          </div>
+          <div style={s.usageDivider} />
+          <div style={s.usageRow}>
+            <span style={s.usageRowLabelGrand}>Estimated total this cycle</span>
+            <span style={s.usageRowValueGrand}>
+              ${status.billing.baseFeeAud + status.usage.estimatedMemorialChargeAud}
+            </span>
+          </div>
+          <p style={s.usageResetNote}>
+            Counters reset each billing cycle. This is an estimate — see the Stripe billing
+            portal for your actual invoice.
+          </p>
         </div>
       )}
 
-      {/* Plan selection */}
-      <div style={s.plansSection}>
-        <h2 style={s.sectionTitle}>
-          {status?.subscriptionStatus === 'ACTIVE' ? 'Change plan' : 'Choose a plan'}
-        </h2>
-        <div style={s.plansGrid}>
-          {PLANS.map(plan => {
-            const isCurrent  = status?.plan === plan.plan;
-            const isPopular  = plan.plan === 'PROFESSIONAL';
-            const isUpgrading = upgrading === plan.plan;
-
-            return (
-              <div
-                key={plan.plan}
-                style={{
-                  ...s.planCard,
-                  ...(isCurrent  ? s.planCardCurrent  : {}),
-                  ...(isPopular && !isCurrent ? s.planCardPopular : {}),
-                }}
-              >
-                {isPopular && !isCurrent && (
-                  <div style={s.popularBadge}>Most popular</div>
-                )}
-                {isCurrent && (
-                  <div style={s.currentBadge}>Current plan</div>
-                )}
-                <div style={s.planName}>{plan.name}</div>
-                <div style={s.planPrice}>
-                  <span style={s.planPriceAmount}>${plan.price}</span>
-                  <span style={s.planPriceFreq}>/mo</span>
-                </div>
-                <p style={s.planDesc}>{plan.description}</p>
-                <ul style={s.featureList}>
-                  {plan.features.map(f => (
-                    <li key={f} style={s.featureItem}>
-                      <span style={s.featureCheck}>✓</span> {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  style={{
-                    ...s.planBtn,
-                    ...(isCurrent   ? s.planBtnCurrent  : {}),
-                    ...(isPopular && !isCurrent ? s.planBtnPopular : {}),
-                    opacity: (isCurrent || isUpgrading) ? 0.6 : 1,
-                  }}
-                  onClick={() => !isCurrent && handleUpgrade(plan.plan)}
-                  disabled={isCurrent || !!upgrading}
-                >
-                  {isUpgrading
-                    ? 'Redirecting…'
-                    : isCurrent
-                    ? 'Current plan'
-                    : status?.subscriptionStatus === 'ACTIVE'
-                    ? 'Switch to this plan'
-                    : 'Start 14-day trial'
-                  }
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-    </div>
-  );
-}
-
-// ── UsageBar sub-component ────────────────────────────────────────────────────
-
-function UsageBar({ label, used, limit }: { label: string; used: number; limit: number }) {
-  const unlimited = limit === -1;
-  const pct       = unlimited ? 0 : usagePercent(used, limit);
-  const nearLimit = !unlimited && pct >= 80;
-  const atLimit   = !unlimited && pct >= 100;
-
-  return (
-    <div style={s.usageBarWrap}>
-      <div style={s.usageBarHeader}>
-        <span style={s.usageBarLabel}>{label}</span>
-        <span style={{ ...s.usageBarCount, color: atLimit ? '#dc2626' : nearLimit ? '#b45309' : '#475569' }}>
-          {unlimited ? `${used} / unlimited` : `${used} / ${limit}`}
-        </span>
-      </div>
-      {!unlimited && (
-        <div style={s.usageTrack}>
-          <div style={{
-            ...s.usageFill,
-            width:      `${pct}%`,
-            background: atLimit ? '#dc2626' : nearLimit ? '#f59e0b' : '#2563eb',
-          }} />
-        </div>
-      )}
     </div>
   );
 }
@@ -388,7 +248,7 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-  page:            { maxWidth: 900, margin: '0 auto', padding: '2rem 1.5rem', fontFamily: 'system-ui, sans-serif' },
+  page:            { maxWidth: 700, margin: '0 auto', padding: '2rem 1.5rem', fontFamily: 'system-ui, sans-serif' },
   header:          { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' },
   title:           { margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' },
   subtitle:        { margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#64748b' },
@@ -401,48 +261,26 @@ const s: Record<string, React.CSSProperties> = {
   warningBanner:   { background: '#fef3c7', color: '#92400e', padding: '0.875rem 1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem', display: 'flex', gap: '0.5rem', alignItems: 'center' },
   warningIcon:     { fontSize: '1rem' },
   inlineLink:      { background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 'inherit' },
-  currentPlanCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  startCard:       { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '2rem', marginBottom: '1rem', textAlign: 'center' as const },
+  startDesc:       { margin: '0.5rem 0 1.25rem', fontSize: '0.9rem', color: '#64748b' },
+  startBtn:        { padding: '0.75rem 1.5rem', borderRadius: 8, border: 'none', background: '#0f172a', color: '#fff', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+  currentPlanCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.5rem', marginBottom: '1rem' },
   currentPlanLeft: { flex: 1 },
   currentPlanHeader: { display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem' },
   currentPlanName: { fontSize: '1.125rem', fontWeight: 700, color: '#0f172a' },
   statusBadge:     { fontSize: '0.75rem', fontWeight: 600, padding: '0.25rem 0.625rem', borderRadius: 999 },
   currentPlanDesc: { margin: '0 0 0.25rem', fontSize: '0.875rem', color: '#64748b' },
   renewalText:     { margin: 0, fontSize: '0.8rem', color: '#94a3b8' },
-  currentPlanPrice: { textAlign: 'right' as const },
-  priceAmount:     { fontSize: '2rem', fontWeight: 800, color: '#0f172a' },
-  priceFreq:       { fontSize: '0.875rem', color: '#64748b' },
   usageCard:       { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.5rem', marginBottom: '1rem' },
-  usageGrid:       { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', margin: '1rem 0 0.5rem' },
-  usageResetNote:  { margin: 0, fontSize: '0.75rem', color: '#94a3b8' },
-  usageBarWrap:    { display: 'flex', flexDirection: 'column' as const, gap: '0.375rem' },
-  usageBarHeader:  { display: 'flex', justifyContent: 'space-between' },
-  usageBarLabel:   { fontSize: '0.875rem', fontWeight: 500, color: '#1e293b' },
-  usageBarCount:   { fontSize: '0.875rem' },
-  usageTrack:      { height: 8, background: '#f1f5f9', borderRadius: 999, overflow: 'hidden' },
-  usageFill:       { height: '100%', borderRadius: 999, transition: 'width 0.3s ease' },
-  featuresCard:    { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.5rem', marginBottom: '1.5rem' },
-  featureGrid:     { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.75rem' },
-  featureRow:      { display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  featureIcon:     { fontSize: '0.875rem', fontWeight: 700, width: 16 },
-  featureLabel:    { fontSize: '0.875rem' },
-  sectionTitle:    { margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 600, color: '#0f172a' },
-  plansSection:    { marginTop: '0.5rem' },
-  plansGrid:       { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' },
-  planCard:        { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.5rem', position: 'relative' as const, display: 'flex', flexDirection: 'column' as const },
-  planCardCurrent: { border: '2px solid #2563eb', background: '#eff6ff' },
-  planCardPopular: { border: '2px solid #0f172a' },
-  popularBadge:    { position: 'absolute' as const, top: -12, left: '50%', transform: 'translateX(-50%)', background: '#0f172a', color: '#fff', fontSize: '0.7rem', fontWeight: 700, padding: '0.25rem 0.75rem', borderRadius: 999, whiteSpace: 'nowrap' as const },
-  currentBadge:    { position: 'absolute' as const, top: -12, left: '50%', transform: 'translateX(-50%)', background: '#2563eb', color: '#fff', fontSize: '0.7rem', fontWeight: 700, padding: '0.25rem 0.75rem', borderRadius: 999, whiteSpace: 'nowrap' as const },
-  planName:        { fontSize: '1rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem' },
-  planPrice:       { marginBottom: '0.5rem' },
-  planPriceAmount: { fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' },
-  planPriceFreq:   { fontSize: '0.875rem', color: '#64748b' },
-  planDesc:        { fontSize: '0.8rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.4 },
-  featureList:     { listStyle: 'none', padding: 0, margin: '0 0 1.5rem', flex: 1, display: 'flex', flexDirection: 'column' as const, gap: '0.375rem' },
-  featureItem:     { fontSize: '0.8rem', color: '#475569', display: 'flex', gap: '0.375rem' },
-  featureCheck:    { color: '#15803d', fontWeight: 700, flexShrink: 0 },
-  planBtn:         { width: '100%', padding: '0.625rem', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', marginTop: 'auto' as const },
-  planBtnCurrent:  { background: '#eff6ff', borderColor: '#2563eb', color: '#2563eb', cursor: 'default' },
-  planBtnPopular:  { background: '#0f172a', borderColor: '#0f172a', color: '#fff' },
+  sectionTitle:    { margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 600, color: '#0f172a' },
+  usageRow:        { display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.875rem' },
+  usageRowLabel:   { color: '#475569' },
+  usageRowValue:   { color: '#0f172a', fontWeight: 600 },
+  usageRowLabelTotal: { color: '#64748b' },
+  usageRowValueTotal: { color: '#334155' },
+  usageRowLabelGrand: { color: '#0f172a', fontWeight: 700 },
+  usageRowValueGrand: { color: '#0f172a', fontWeight: 800, fontSize: '1.1rem' },
+  usageDivider:    { height: 1, background: '#f1f5f9', margin: '0.5rem 0' },
+  usageResetNote:  { margin: '0.75rem 0 0', fontSize: '0.75rem', color: '#94a3b8' },
   btnSecondary:    { background: '#fff', border: '1px solid #e2e8f0', color: '#475569', padding: '0.5rem 1rem', borderRadius: 8, fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer' },
 };

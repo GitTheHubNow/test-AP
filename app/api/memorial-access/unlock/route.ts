@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { timingSafeStringEqual } from '@/lib/timingSafe';
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year, matches app/[slug]/page.tsx
 
@@ -41,14 +42,21 @@ export async function POST(request: NextRequest) {
     select: { id: true, publicToken: true },
   });
 
-  if (!memorial || memorial.publicToken !== body.key) {
+  if (!memorial || !timingSafeStringEqual(memorial.publicToken, body.key)) {
     // Deliberately vague error — don't confirm/deny whether the
     // memorialId itself is valid, only that this combination isn't.
     return NextResponse.json({ success: false, error: 'Invalid access code' }, { status: 403 });
   }
 
   const response = NextResponse.json({ success: true });
-  response.cookies.set(`memorial_unlock_${memorial.id}`, memorial.publicToken, {
+  // memorial.publicToken is typed string | null (Prisma schema), but by
+  // this point timingSafeStringEqual has already confirmed it equals
+  // body.key (a non-null string) — if it were null, that check would
+  // have returned false and we'd have exited above. The assertion here
+  // reflects that already-proven guarantee; it's not bypassing a real
+  // possibility of null reaching .cookies.set(). Surfaced by the React
+  // 19 / Next 15+ upgrade's stricter type-checking, not a new bug.
+  response.cookies.set(`memorial_unlock_${memorial.id}`, memorial.publicToken!, {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',

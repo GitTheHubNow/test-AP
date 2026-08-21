@@ -20,6 +20,8 @@ import { renderWelcomeEmail }         from '@/lib/email-templates/welcome-email'
 import { renderStalePendingEmail }    from '@/lib/email-templates/automation-emails';
 import { renderExpiryWarningEmail }   from '@/lib/email-templates/automation-emails';
 import { renderMemorialSuspendedEmail } from '@/lib/email-templates/automation-emails';
+import { renderLastChanceUploadEmail } from '@/lib/email-templates/automation-emails';
+import { renderPublishPromptEmail }    from '@/lib/email-templates/automation-emails';
 import {
   renderHandoverInitiatedEmail,
   renderHandoverAcceptedFHEmail,
@@ -291,4 +293,69 @@ export async function sendMemorialSuspended(params: {
       expiresAt:     params.expiresAt,
     }),
   });
+}
+
+// ── 9. Last chance to upload — sent to family/nominated contact ──────────────
+//
+// Fires once per memorial, ~5 days before the service (see
+// lib/memorial/journeyGate.ts for the exact timing and
+// lib/jobs/job-journey-automation.ts for the cron that calls this).
+
+export async function sendLastChanceUpload(params: {
+  familyEmail:      string;
+  familyName?:      string;
+  memorialId:       string;
+  memorialTitle:    string;
+  funeralHomeName:  string;
+  uploadUrl:        string;
+  daysUntilService: number;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'LAST_CHANCE_UPLOAD', params.memorialId)) return;
+
+  sendEmailAsync({
+    to:      params.familyEmail,
+    subject: `Last chance to share photos for ${params.memorialTitle}'s memorial`,
+    html:    renderLastChanceUploadEmail({
+      memorialTitle:    params.memorialTitle,
+      familyName:       params.familyName,
+      uploadUrl:        params.uploadUrl,
+      funeralHomeName:  params.funeralHomeName,
+      daysUntilService: params.daysUntilService,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'LAST_CHANCE_UPLOAD', params.memorialId);
+}
+
+// ── 10. Ready to publish — sent to funeral home staff/owner ──────────────────
+//
+// Fires once per memorial, the day before the service.
+
+export async function sendPublishPrompt(params: {
+  ownerEmail:    string;
+  ownerName?:    string;
+  memorialId:    string;
+  memorialTitle: string;
+  pendingCount:  number;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'PUBLISH_PROMPT', params.memorialId)) return;
+
+  const previewUrl = `${APP_URL}/dashboard/memorial/${params.memorialId}/preview`;
+  const videoUrl    = `${APP_URL}/dashboard/memorial/${params.memorialId}/video`;
+
+  sendEmailAsync({
+    to:      params.ownerEmail,
+    subject: `${params.memorialTitle}'s service is tomorrow — ready to publish?`,
+    html:    renderPublishPromptEmail({
+      memorialTitle: params.memorialTitle,
+      ownerName:     params.ownerName,
+      previewUrl,
+      videoUrl,
+      pendingCount:  params.pendingCount,
+    }),
+  });
+
+  if (orgId) recordBatchSent(orgId, 'PUBLISH_PROMPT', params.memorialId);
 }

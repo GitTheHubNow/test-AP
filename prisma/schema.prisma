@@ -186,8 +186,17 @@ model Memorial {
 
   // Phase 10: Automation
   nominatedEmail      String?
+  nominatedName       String?
   autoSentAt          DateTime?
   expiryWarningSentAt DateTime?
+
+  // Memorial journey automation — funeral-home operations timeline
+  // (see lib/memorial/journeyGate.ts). Manual early-unlock for Tribute
+  // Video, plus one-shot guards so the two cron reminder emails never
+  // send twice for the same memorial.
+  tributeUnlockOverride Boolean   @default(false)
+  lastChanceEmailSentAt DateTime?
+  publishPromptSentAt   DateTime?
 
   // Phase 11-13: Workflow
   workflowStage   String    @default("COLLECTING")

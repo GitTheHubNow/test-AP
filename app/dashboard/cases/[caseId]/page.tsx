@@ -10,11 +10,13 @@ import { getOrgIdForUser }    from '@/lib/tenant';
 import Link                   from 'next/link';
 import { CaseDetail }         from '@/components/cases/CaseDetail';
 
-interface Props { params: { caseId: string } }
+interface Props { params: Promise<{ caseId: string }> }
 
 export const dynamic = 'force-dynamic';
 
 export default async function CaseDetailPage({ params }: Props) {
+  const { caseId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -28,7 +30,7 @@ export default async function CaseDetailPage({ params }: Props) {
   if (!org?.featureCaseLite) redirect('/dashboard/cases');
 
   const funeralCase = await prisma.funeralCase.findFirst({
-    where: { id: params.caseId, organisationId: orgId },
+    where: { id: caseId, organisationId: orgId },
     include: {
       memorial: {
         select: {
@@ -121,7 +123,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1.4rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   ref: {

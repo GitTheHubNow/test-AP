@@ -41,15 +41,25 @@ export const dynamic    = 'force-dynamic';
 export const revalidate = 0;
 
 interface Props {
-  params:       { slug: string };
-  searchParams: { key?: string };
+  // Next.js 16: params and searchParams are now Promises — see
+  // https://nextjs.org/docs/app/guides/upgrading/version-15#params--searchparams
+  // The upgrade codemod (@next/codemod upgrade) reported this project as
+  // "already on target version" and skipped its actual code transforms
+  // (it only checked the package.json version, not whether the code had
+  // been migrated) — so every usage in this file needed the same fix
+  // applied by hand instead of automatically.
+  params:       Promise<{ slug: string }>;
+  searchParams: Promise<{ key?: string }>;
 }
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year — matches the unlock route
 
 export default async function QrLandingPage({ params, searchParams }: Props) {
+  const { slug } = await params;
+  const { key }  = await searchParams;
+
   const memorial = await prisma.memorial.findFirst({
-    where: { slug: params.slug },
+    where: { slug },
     select: {
       id:                true,
       firstName:         true,
@@ -117,13 +127,13 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
   const publicToken = await ensurePublicToken(memorial.id, memorial.publicToken);
 
   // ── Access gate ─────────────────────────────────────────────────────────
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const cookieName = `memorial_unlock_${memorial.id}`;
   const hasValidCookie = cookieStore.get(cookieName)?.value === publicToken;
-  const hasValidKey = searchParams.key === publicToken;
+  const hasValidKey = key === publicToken;
 
   if (!hasValidCookie && !hasValidKey) {
-    return <MemorialGate slug={params.slug} memorialId={memorial.id} memorialTitle={memorial.title} />;
+    return <MemorialGate slug={slug} memorialId={memorial.id} memorialTitle={memorial.title} />;
   }
 
   // needsCookieSet is handled client-side by MemorialGate itself now (it
@@ -220,8 +230,8 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
       // equivalent path-token — access is via publicToken as a query
       // param instead — so slug is passed here purely to satisfy the
       // shared type. Not used for any access-control logic.
-      token:          params.slug,
-      slug:           params.slug,
+      token:          slug,
+      slug:           slug,
       publicToken,    // passed to client so it can call the unlock-cookie route
       needsCookieSet,
       displayName,
@@ -334,8 +344,10 @@ function renderExperience(
 // layer, unchanged).
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+
   const memorial = await prisma.memorial.findFirst({
-    where:  { slug: params.slug },
+    where:  { slug },
     select: {
       firstName:     true,
       lastName:      true,

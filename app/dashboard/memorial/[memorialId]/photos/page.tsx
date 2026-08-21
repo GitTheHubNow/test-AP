@@ -4,12 +4,16 @@ import { prisma } from '@/lib/prisma';
 import { getPublicUrl } from '@/lib/upload-shared';
 import { PhotoCollectionManager } from '@/components/photos/PhotoCollectionManager';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function PhotosPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -18,13 +22,13 @@ export default async function PhotosPage({ params }: Props) {
   // API route sweep, but this one lives in a page Server Component, so
   // it wasn't caught by that pass (which only covered app/api/**).
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:               true,
       title:            true,
@@ -34,14 +38,31 @@ export default async function PhotosPage({ params }: Props) {
       uploadLinkToken:  true,
       uploadLinkEnabled: true,
       workflowStage:    true,
+      funeralDate:            true,
+      tributeUnlockOverride:  true,
     },
   });
 
   if (!memorial) notFound();
 
+  // Server-side enforcement of the same gate the sidebar reflects — see
+  // lib/memorial/journeyGate.ts. Photos unlocks together with Tribute
+  // Video and Guest Book, normally 5 days before the service.
+  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+    return (
+      <SectionLockedScreen
+        memorialId={memorial.id}
+        sectionName="Photos"
+        daysLeft={daysLeft}
+        hasFuneralDate={Boolean(memorial.funeralDate)}
+      />
+    );
+  }
+
   // Fetch all collection items that are PHOTOs (and VIDEOs for completeness)
   const items = await prisma.collectionItem.findMany({
-    where:   { memorialId: params.memorialId, type: { in: ['PHOTO', 'VIDEO'] } },
+    where:   { memorialId: memorialId, type: { in: ['PHOTO', 'VIDEO'] } },
     orderBy: [{ createdAt: 'asc' }],
     select: {
       id:            true,

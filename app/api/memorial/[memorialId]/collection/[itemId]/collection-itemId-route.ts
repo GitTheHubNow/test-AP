@@ -31,25 +31,27 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string; itemId: string } }
+  { params }: { params: Promise<{ memorialId: string; itemId: string }> }
 ) {
+  const { memorialId, itemId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const item = await prisma.collectionItem.findUnique({
-    where:  { id: params.itemId },
+    where:  { id: itemId },
     select: { id: true, memorialId: true, status: true, type: true, blobKey: true, promotedMemory: { select: { id: true } } },
   });
 
-  if (!item || item.memorialId !== params.memorialId) {
+  if (!item || item.memorialId !== memorialId) {
     return NextResponse.json({ success: false, error: 'Item not found' }, { status: 404 });
   }
 
@@ -126,7 +128,7 @@ export async function PATCH(
 
           memory = await tx.memory.create({
             data: {
-              memorialId:      params.memorialId,
+              memorialId:      memorialId,
               authorName:      collectionItem.uploaderRole === 'FAMILY' ? 'Family' : null,
               message,
               status:          MemoryStatus.APPROVED,
@@ -140,7 +142,7 @@ export async function PATCH(
           if (collectionItem.blobKey && collectionItem.mimeType) {
             await tx.media.create({
               data: {
-                memorialId: params.memorialId,
+                memorialId: memorialId,
                 memoryId:   memory.id,
                 blobKey:    collectionItem.blobKey,
                 mimeType:   collectionItem.mimeType,
@@ -172,7 +174,7 @@ export async function PATCH(
               ? ReasonCode.REJECTION
               : ReasonCode.EDIT,
           metadata: {
-            memorialId:  params.memorialId,
+            memorialId:  memorialId,
             newStatus,
             promoted,
             promotedMemoryId: memory?.id ?? null,
@@ -207,25 +209,27 @@ export async function PATCH(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { memorialId: string; itemId: string } }
+  { params }: { params: Promise<{ memorialId: string; itemId: string }> }
 ) {
+  const { memorialId, itemId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'delete');
+    await assertMemorialAccess(memorialId, userId, 'delete');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const item = await prisma.collectionItem.findUnique({
-    where:  { id: params.itemId },
+    where:  { id: itemId },
     select: { id: true, memorialId: true, status: true, blobKey: true },
   });
 
-  if (!item || item.memorialId !== params.memorialId) {
+  if (!item || item.memorialId !== memorialId) {
     return NextResponse.json({ success: false, error: 'Item not found' }, { status: 404 });
   }
 
@@ -248,7 +252,7 @@ export async function DELETE(
           actorId:    userId,
           actorRole:  ActorRole.OWNER,
           reasonCode: ReasonCode.DELETION,
-          metadata:   { memorialId: params.memorialId },
+          metadata:   { memorialId: memorialId },
         },
       });
     });

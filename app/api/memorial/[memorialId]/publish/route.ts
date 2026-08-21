@@ -19,21 +19,23 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       workflowStage: true,
@@ -70,7 +72,7 @@ export async function POST(
   try {
     await prisma.$transaction(async (tx) => {
       await tx.memorial.update({
-        where: { id: params.memorialId },
+        where: { id: memorialId },
         data: {
           workflowStage: 'LIVE',
           publishedAt:   new Date(),
@@ -81,7 +83,7 @@ export async function POST(
       await tx.auditEvent.create({
         data: {
           entityType: EntityType.MEMORIAL,
-          entityId:   params.memorialId,
+          entityId:   memorialId,
           action:     AuditAction.PUBLISH,
           actorId:    userId,
           actorRole:  ActorRole.OWNER,

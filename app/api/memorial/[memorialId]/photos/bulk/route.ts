@@ -16,13 +16,15 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -43,7 +45,7 @@ export async function PATCH(
 
   // Verify all IDs belong to this memorial
   const count = await prisma.collectionItem.count({
-    where: { id: { in: body.ids }, memorialId: params.memorialId },
+    where: { id: { in: body.ids }, memorialId: memorialId },
   });
 
   if (count !== body.ids.length) {
@@ -52,7 +54,7 @@ export async function PATCH(
 
   try {
     await prisma.collectionItem.updateMany({
-      where: { id: { in: body.ids }, memorialId: params.memorialId },
+      where: { id: { in: body.ids }, memorialId: memorialId },
       data: {
         ...(body.status      !== undefined ? { status:      body.status      as any } : {}),
         ...(body.forTribute  !== undefined ? { forTribute:  body.forTribute  } : {}),

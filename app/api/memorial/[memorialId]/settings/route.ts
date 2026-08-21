@@ -40,8 +40,10 @@ interface UpdateSettingsRequest {
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     // 1. AUTHENTICATION
     const { userId } = await auth();
@@ -54,10 +56,10 @@ export async function PATCH(
     }
 
     // 2. VERIFY ORG-SCOPED ACCESS
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       // firstName/lastName needed below when only one of the two is being
       // updated — the title needs to be rebuilt from both, even the one
       // that isn't changing.
@@ -133,7 +135,7 @@ export async function PATCH(
 
     // 6. UPDATE MEMORIAL
     const updatedMemorial = await prisma.memorial.update({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       data: updateData,
       select: {
         id: true,

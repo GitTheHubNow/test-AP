@@ -23,7 +23,7 @@ export default async function HomePage() {
       <nav style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.75rem 4rem' }}>
         <div>
           <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 600, color: 'var(--ivory)', letterSpacing: '0.04em' }}>
-            Memoriam
+            Absolute Posterity
           </span>
           <span style={{ display: 'block', fontSize: '0.58rem', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ash)', marginTop: '1px' }}>
             Digital Memorial Platform
@@ -73,7 +73,7 @@ export default async function HomePage() {
           maxWidth: '520px',
           marginBottom: '3.5rem',
         }}>
-          Memoriam gives families a quiet, enduring space to collect memories, share stories, and preserve the essence of those they love — for 25 years and beyond.
+          Absolute Posterity gives families a quiet, enduring space to collect memories, share stories, and preserve the essence of those they love — for 25 years and beyond.
         </p>
 
         {/* CTAs */}

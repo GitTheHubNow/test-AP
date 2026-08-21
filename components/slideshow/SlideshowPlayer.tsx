@@ -343,7 +343,7 @@ export function SlideshowPlayer({
               ...styles.dot,
               opacity:    i === current ? 1 : 0.35,
               transform:  i === current ? 'scale(1.4)' : 'scale(1)',
-              background: i === current ? '#c9a96e' : '#fff',
+              background: i === current ? '#cdba93' : '#fff',
             }}
             aria-label={`Photo ${i + 1}`}
           />
@@ -422,14 +422,14 @@ export function SlideshowPlayer({
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-// All colours pulled from Memoriam's brand tokens: #c9a96e gold, #0a0a16 navy.
+// All colours pulled from Absolute Posterity's brand tokens: #cdba93 gold, #4f5d75 navy.
 // TV-safe: nothing sits within 5% of the viewport edge, pure white avoided.
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
     position:        'fixed',
     inset:           0,
-    background:      '#0a0a16',
+    background:      '#4f5d75',
     overflow:        'hidden',
     cursor:          'none',
     userSelect:      'none',
@@ -490,7 +490,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   captionSub: {
     margin:     '0.4em 0 0',
-    color:      '#c9a96e',
+    color:      '#cdba93',
     fontSize:   'clamp(0.75rem, 1.4vw, 1rem)',
     fontFamily: '"Georgia", serif',
     fontStyle:  'normal',
@@ -541,7 +541,7 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.04em',
   },
   musicLabel: {
-    color:       '#c9a96e',
+    color:       '#cdba93',
     fontSize:    'clamp(0.7rem, 1.2vw, 0.9rem)',
     fontFamily:  'system-ui, sans-serif',
     textShadow:  '0 1px 4px rgba(0,0,0,0.9)',
@@ -582,7 +582,7 @@ const styles: Record<string, React.CSSProperties> = {
     textShadow:  '0 2px 6px rgba(0,0,0,0.8)',
   },
   counter: {
-    color:       '#c9a96e',
+    color:       '#cdba93',
     fontSize:    'clamp(0.75rem, 1.4vw, 1rem)',
     fontFamily:  'system-ui, monospace',
     minWidth:    '4em',
@@ -620,7 +620,7 @@ const styles: Record<string, React.CSSProperties> = {
   emptyWrap: {
     position:       'fixed',
     inset:          0,
-    background:     '#0a0a16',
+    background:     '#4f5d75',
     display:        'flex',
     alignItems:     'center',
     justifyContent: 'center',

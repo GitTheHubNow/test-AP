@@ -99,7 +99,7 @@ export function MemorialGate({ slug, memorialId, memorialTitle }: MemorialGatePr
         <div className="text-center mb-6">
           <div
             className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center text-xl"
-            style={{ backgroundColor: '#c9a96e22', border: '1.5px solid #c9a96e55' }}
+            style={{ backgroundColor: '#cdba9322', border: '1.5px solid #cdba9355' }}
           >
             🕊️
           </div>
@@ -125,7 +125,7 @@ export function MemorialGate({ slug, memorialId, memorialTitle }: MemorialGatePr
             disabled={submitting}
             className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm
                        focus:outline-none focus:ring-2 focus:ring-offset-1"
-            style={{ ['--tw-ring-color' as string]: '#c9a96e' }}
+            style={{ ['--tw-ring-color' as string]: '#cdba93' }}
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
@@ -133,7 +133,7 @@ export function MemorialGate({ slug, memorialId, memorialTitle }: MemorialGatePr
             disabled={submitting}
             className="w-full py-2.5 rounded-xl font-medium text-white transition-all
                        duration-150 hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-            style={{ backgroundColor: '#c9a96e' }}
+            style={{ backgroundColor: '#cdba93' }}
           >
             {submitting ? 'Checking...' : 'Continue'}
           </button>

@@ -25,8 +25,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     // 1. AUTHENTICATION
     const { userId } = await auth();
@@ -39,10 +41,10 @@ export async function GET(
     }
 
     // 2. VERIFY ORG-SCOPED ACCESS
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     // 3. GET STATISTICS
-    const stats = await getMemorialStats(params.memorialId);
+    const stats = await getMemorialStats(memorialId);
 
     // 4. SUCCESS RESPONSE
     return NextResponse.json({

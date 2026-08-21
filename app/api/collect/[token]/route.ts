@@ -21,19 +21,21 @@ import { checkRateLimit } from '@/lib/rateLimit';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
   // Bucketed per-invite-token: a legitimate family gathering uploading
   // from behind one shared NAT/IP (common — a wake, a funeral home's
   // guest wifi) shouldn't be throttled by another unrelated invite's
   // traffic sharing that IP, but a single invite link being hammered by
   // a script still gets capped.
-  const limited = await checkRateLimit(request, `collect-upload:${params.token}`, { max: 20, windowMs: 60 * 1000 });
+  const limited = await checkRateLimit(request, `collect-upload:${token}`, { max: 20, windowMs: 60 * 1000 });
   if (limited) return limited;
 
   // Validate invite token
   const invite = await prisma.collectionInvite.findUnique({
-    where:  { token: params.token },
+    where:  { token: token },
     select: { id: true, memorialId: true, status: true, expiresAt: true, uploadCount: true },
   });
 
@@ -249,10 +251,12 @@ export async function POST(
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
   const invite = await prisma.collectionInvite.findUnique({
-    where:  { token: params.token },
+    where:  { token: token },
     select: {
       id:            true,
       status:        true,

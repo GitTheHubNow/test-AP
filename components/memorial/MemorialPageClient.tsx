@@ -100,11 +100,11 @@ function Lightbox({ photos, index, onClose, onNav }: {
     <div
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(10,8,5,0.96)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <button onClick={onClose} style={{ position: 'fixed', top: 20, right: 24, background: 'none', border: 'none', color: '#c9a96e', fontSize: '1.75rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+      <button onClick={onClose} style={{ position: 'fixed', top: 20, right: 24, background: 'none', border: 'none', color: '#cdba93', fontSize: '1.75rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
 
       {index > 0 && (
         <button onClick={e => { e.stopPropagation(); onNav(index - 1); }}
-          style={{ position: 'fixed', left: 20, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(201,169,110,0.3)', color: '#c9a96e', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: '1.2rem' }}>
+          style={{ position: 'fixed', left: 20, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(201,169,110,0.3)', color: '#cdba93', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: '1.2rem' }}>
           ‹
         </button>
       )}
@@ -112,7 +112,7 @@ function Lightbox({ photos, index, onClose, onNav }: {
       <div onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
         <img src={photo.url} alt={photo.caption ?? ''} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 4 }} />
         {photo.caption && (
-          <p style={{ color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '0.875rem', textAlign: 'center', fontStyle: 'italic' }}>
+          <p style={{ color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '0.875rem', textAlign: 'center', fontStyle: 'italic' }}>
             {photo.caption}
           </p>
         )}
@@ -121,7 +121,7 @@ function Lightbox({ photos, index, onClose, onNav }: {
 
       {index < photos.length - 1 && (
         <button onClick={e => { e.stopPropagation(); onNav(index + 1); }}
-          style={{ position: 'fixed', right: 20, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(201,169,110,0.3)', color: '#c9a96e', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: '1.2rem' }}>
+          style={{ position: 'fixed', right: 20, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(201,169,110,0.3)', color: '#cdba93', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: '1.2rem' }}>
           ›
         </button>
       )}
@@ -178,7 +178,7 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
     padding: '0.7rem 0.875rem',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(201,169,110,0.2)',
-    borderRadius: 6, color: '#f5f0e8',
+    borderRadius: 6, color: '#f4f1ea',
     fontFamily: 'Georgia, serif', fontSize: '0.9rem',
     outline: 'none',
   };
@@ -186,12 +186,12 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
   if (state === 'done') {
     return (
       <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(201,169,110,0.06)', borderRadius: 10, border: '1px solid rgba(201,169,110,0.2)' }}>
-        <p style={{ color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '1rem', marginBottom: '0.5rem' }}>✦ Thank you</p>
+        <p style={{ color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '1rem', marginBottom: '0.5rem' }}>✦ Thank you</p>
         <p style={{ color: '#8a8070', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
           Your message has been received.
         </p>
         <button onClick={() => { setState('idle'); setName(''); setMessage(''); setLocation(''); }}
-          style={{ marginTop: '1rem', background: 'none', border: '1px solid rgba(201,169,110,0.3)', color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: 4, cursor: 'pointer' }}>
+          style={{ marginTop: '1rem', background: 'none', border: '1px solid rgba(201,169,110,0.3)', color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: 4, cursor: 'pointer' }}>
           Leave another message
         </button>
       </div>
@@ -211,7 +211,7 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
         </div>
       </div>
       <div>
-        <label style={{ display: 'block', fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8070', marginBottom: '0.4rem' }}>Message <span style={{ color: '#c9a96e' }}>*</span></label>
+        <label style={{ display: 'block', fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8070', marginBottom: '0.4rem' }}>Message <span style={{ color: '#cdba93' }}>*</span></label>
         <textarea style={{ ...inp, minHeight: 100, resize: 'vertical' }} value={message} onChange={e => setMessage(e.target.value)} placeholder="Share a memory or leave a message for the family…" maxLength={1000} />
         <p style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: '0.25rem', textAlign: 'right' }}>{message.length} / 1000</p>
       </div>
@@ -225,8 +225,8 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
         disabled={!message.trim() || state === 'submitting'}
         style={{
           padding: '0.875rem', background: message.trim() ? 'rgba(201,169,110,0.15)' : 'transparent',
-          border: `1px solid ${message.trim() ? '#c9a96e' : 'rgba(201,169,110,0.2)'}`,
-          color: message.trim() ? '#c9a96e' : '#5a5040',
+          border: `1px solid ${message.trim() ? '#cdba93' : 'rgba(201,169,110,0.2)'}`,
+          color: message.trim() ? '#cdba93' : '#5a5040',
           fontFamily: 'Georgia, serif', fontSize: '0.9rem', letterSpacing: '0.06em',
           borderRadius: 6, cursor: message.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
         }}>
@@ -278,7 +278,7 @@ function MemoryForm({ token, onSubmitted }: { token: string; onSubmitted: () => 
     padding: '0.7rem 0.875rem',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(201,169,110,0.2)',
-    borderRadius: 6, color: '#f5f0e8',
+    borderRadius: 6, color: '#f4f1ea',
     fontFamily: 'Georgia, serif', fontSize: '0.9rem',
     outline: 'none',
   };
@@ -286,12 +286,12 @@ function MemoryForm({ token, onSubmitted }: { token: string; onSubmitted: () => 
   if (state === 'done') {
     return (
       <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(201,169,110,0.06)', borderRadius: 10, border: '1px solid rgba(201,169,110,0.2)' }}>
-        <p style={{ color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '1rem', marginBottom: '0.5rem' }}>✦ Thank you</p>
+        <p style={{ color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '1rem', marginBottom: '0.5rem' }}>✦ Thank you</p>
         <p style={{ color: '#8a8070', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
           Your memory has been received and will appear once reviewed.
         </p>
         <button onClick={() => { setState('idle'); setName(''); setMessage(''); }}
-          style={{ marginTop: '1rem', background: 'none', border: '1px solid rgba(201,169,110,0.3)', color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: 4, cursor: 'pointer' }}>
+          style={{ marginTop: '1rem', background: 'none', border: '1px solid rgba(201,169,110,0.3)', color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: 4, cursor: 'pointer' }}>
           Share another memory
         </button>
       </div>
@@ -305,7 +305,7 @@ function MemoryForm({ token, onSubmitted }: { token: string; onSubmitted: () => 
         <input style={inp} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Optional" maxLength={100} />
       </div>
       <div>
-        <label style={{ display: 'block', fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8070', marginBottom: '0.4rem' }}>Your memory <span style={{ color: '#c9a96e' }}>*</span></label>
+        <label style={{ display: 'block', fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8070', marginBottom: '0.4rem' }}>Your memory <span style={{ color: '#cdba93' }}>*</span></label>
         <textarea style={{ ...inp, minHeight: 160, resize: 'vertical' }} value={message} onChange={e => setMessage(e.target.value)} placeholder="Share a story, a favourite moment, or what they meant to you…" maxLength={5000} />
         <p style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: '0.25rem', textAlign: 'right' }}>{message.length} / 5000</p>
       </div>
@@ -319,8 +319,8 @@ function MemoryForm({ token, onSubmitted }: { token: string; onSubmitted: () => 
         disabled={!message.trim() || state === 'submitting'}
         style={{
           padding: '0.875rem', background: message.trim() ? 'rgba(201,169,110,0.15)' : 'transparent',
-          border: `1px solid ${message.trim() ? '#c9a96e' : 'rgba(201,169,110,0.2)'}`,
-          color: message.trim() ? '#c9a96e' : '#5a5040',
+          border: `1px solid ${message.trim() ? '#cdba93' : 'rgba(201,169,110,0.2)'}`,
+          color: message.trim() ? '#cdba93' : '#5a5040',
           fontFamily: 'Georgia, serif', fontSize: '0.9rem', letterSpacing: '0.06em',
           borderRadius: 6, cursor: message.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
         }}>
@@ -357,7 +357,7 @@ function ShareBar({ displayName, url }: { displayName: string; url: string }) {
       <a href={`mailto:?subject=In memory of ${displayName}&body=${url}`}>
         <button style={btnStyle}>Email</button>
       </a>
-      <button onClick={copy} style={{ ...btnStyle, borderColor: copied ? '#c9a96e' : undefined, color: copied ? '#c9a96e' : undefined }}>
+      <button onClick={copy} style={{ ...btnStyle, borderColor: copied ? '#cdba93' : undefined, color: copied ? '#cdba93' : undefined }}>
         {copied ? '✓ Copied' : 'Copy link'}
       </button>
     </div>
@@ -396,7 +396,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
 
   const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-  const accent = memorial.settings.primaryColor ?? '#c9a96e';
+  const accent = memorial.settings.primaryColor ?? '#cdba93';
 
   const hasLife = memorial.birthDate || memorial.deathDate;
   const lifeLine = [
@@ -409,7 +409,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
     : null;
 
   return (
-    <div style={{ background: '#0f0d0a', minHeight: '100vh', color: '#f5f0e8', fontFamily: 'Georgia, serif' }}>
+    <div style={{ background: '#414d61', minHeight: '100vh', color: '#f4f1ea', fontFamily: 'Georgia, serif' }}>
 
       {/* ── HERO ── */}
       <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'hidden' }}>
@@ -421,7 +421,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(10,8,5,0.97) 0%, rgba(10,8,5,0.5) 50%, rgba(10,8,5,0.1) 100%)' }} />
           </div>
         ) : (
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 30% 40%, rgba(201,169,110,0.12) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(201,169,110,0.07) 0%, transparent 50%), #0f0d0a' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 30% 40%, rgba(201,169,110,0.12) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(201,169,110,0.07) 0%, transparent 50%), #414d61' }} />
         )}
 
         <div style={{ position: 'relative', zIndex: 1, padding: 'clamp(2rem, 6vw, 5rem) clamp(1.5rem, 6vw, 5rem)', maxWidth: 700 }}>
@@ -429,7 +429,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
             In Loving Memory
           </p>
 
-          <h1 style={{ fontFamily: '"Cormorant Garamond", "Playfair Display", Georgia, serif', fontSize: 'clamp(2.75rem, 8vw, 6rem)', fontWeight: 300, lineHeight: 1.0, letterSpacing: '-0.01em', color: '#f5f0e8', margin: '0 0 1rem' }}>
+          <h1 style={{ fontFamily: '"Cormorant Garamond", "Playfair Display", Georgia, serif', fontSize: 'clamp(2.75rem, 8vw, 6rem)', fontWeight: 300, lineHeight: 1.0, letterSpacing: '-0.01em', color: '#f4f1ea', margin: '0 0 1rem' }}>
             {memorial.displayName}
           </h1>
 
@@ -464,7 +464,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
                 {memorial.serviceType ?? 'Service'}
               </p>
               {memorial.serviceTime && (
-                <p style={{ fontSize: '1.1rem', color: '#f5f0e8', marginBottom: '0.25rem' }}>
+                <p style={{ fontSize: '1.1rem', color: '#f4f1ea', marginBottom: '0.25rem' }}>
                   {new Date(memorial.serviceTime).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               )}
@@ -477,7 +477,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
             {memorial.venueName && (
               <div>
                 <p style={{ fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: accent, marginBottom: '0.5rem' }}>Venue</p>
-                <p style={{ fontSize: '1.1rem', color: '#f5f0e8', marginBottom: '0.25rem' }}>{memorial.venueName}</p>
+                <p style={{ fontSize: '1.1rem', color: '#f4f1ea', marginBottom: '0.25rem' }}>{memorial.venueName}</p>
                 {memorial.venueAddress && (
                   <a
                     href={`https://maps.google.com/?q=${encodeURIComponent(memorial.venueAddress)}`}
@@ -548,7 +548,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
           <p style={{ fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: accent, marginBottom: '0.5rem' }}>
             Memories
           </p>
-          <p style={{ fontSize: 'clamp(1.25rem, 3vw, 1.75rem)', fontWeight: 300, color: '#f5f0e8', fontFamily: '"Cormorant Garamond", Georgia, serif', marginBottom: '2rem' }}>
+          <p style={{ fontSize: 'clamp(1.25rem, 3vw, 1.75rem)', fontWeight: 300, color: '#f4f1ea', fontFamily: '"Cormorant Garamond", Georgia, serif', marginBottom: '2rem' }}>
             Shared by those who knew {memorial.firstName || memorial.displayName}
           </p>
 
@@ -567,7 +567,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {memory.featured && <span style={{ fontSize: '0.65rem', color: accent }}>✦</span>}
-                        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f5f0e8' }}>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f4f1ea' }}>
                           {memory.authorName ?? 'Anonymous'}
                         </span>
                       </div>
@@ -629,7 +629,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
             <p style={{ fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: accent, marginBottom: '0.5rem' }}>
               {memorial.settings.guestBookTitle ?? 'Guest Book'}
             </p>
-            <p style={{ fontSize: 'clamp(1.25rem, 3vw, 1.75rem)', fontWeight: 300, color: '#f5f0e8', fontFamily: '"Cormorant Garamond", Georgia, serif', marginBottom: '0.75rem' }}>
+            <p style={{ fontSize: 'clamp(1.25rem, 3vw, 1.75rem)', fontWeight: 300, color: '#f4f1ea', fontFamily: '"Cormorant Garamond", Georgia, serif', marginBottom: '0.75rem' }}>
               Leave a message for the family
             </p>
             {memorial.settings.guestBookPrompt && (
@@ -653,7 +653,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                           {entry.pinned && <span style={{ fontSize: '0.65rem', color: accent }}>📌</span>}
-                          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f5f0e8' }}>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f4f1ea' }}>
                             {entry.authorName ?? 'Anonymous'}
                           </span>
                           {entry.location && (
@@ -688,7 +688,7 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
           {memorial.displayName} · Forever remembered
         </p>
         <p style={{ fontSize: '0.65rem', color: '#2a2018', letterSpacing: '0.06em' }}>
-          Memoriam
+          Absolute Posterity
         </p>
       </footer>
 

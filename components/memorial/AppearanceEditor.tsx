@@ -46,7 +46,7 @@ const FONTS: { key: AppearanceSettings['fontFamily']; label: string; stack: stri
 
 const ACCENT_COLORS = [
   '#1c1917', '#1e3a5f', '#1a3a2a', '#3b1a1a',
-  '#c9a96e', '#9b4523', '#2d6a4f', '#1d4ed8',
+  '#cdba93', '#9b4523', '#2d6a4f', '#1d4ed8',
   '#7c3aed', '#be185d', '#0f766e', '#b45309',
 ];
 
@@ -212,9 +212,14 @@ export function AppearanceEditor({ memorialId, displayName, heroUrl, initial, pu
     display: 'block',
   };
 
-  return (
-    <>
-      <style>{`
+  // Same hydration-mismatch class as the QR page fix: raw <style> text
+  // with single-quoted CSS values (font-family: '...', @import url('...'))
+  // gets HTML-entity-encoded on the server render but not on client
+  // hydration, so React sees mismatched text even though the CSS is
+  // identical. Extracting the string and using dangerouslySetInnerHTML
+  // (the documented Next.js approach for raw <style> tags) avoids
+  // React's text-node diffing for this block entirely.
+  const appearanceEditorStyles = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@400&family=Cormorant+Garamond:wght@400;500&display=swap');
 
         .ae-wrap {
@@ -469,7 +474,11 @@ export function AppearanceEditor({ memorialId, displayName, heroUrl, initial, pu
           box-shadow: 0 8px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
           flex-shrink: 0;
         }
-      `}</style>
+      `;
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: appearanceEditorStyles }} />
 
       <div className="ae-wrap">
 

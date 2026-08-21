@@ -45,7 +45,7 @@ export default function OnboardedBanner() {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
     }}>
       <div>
-        <p style={{ margin: '0 0 0.2rem', fontSize: '0.85rem', color: '#f5f0e8' }}>
+        <p style={{ margin: '0 0 0.2rem', fontSize: '0.85rem', color: '#f4f1ea' }}>
           You're all set up.
         </p>
         <p style={{ margin: 0, fontSize: '0.78rem', color: '#8a8aaa' }}>
@@ -58,7 +58,7 @@ export default function OnboardedBanner() {
           style={{
             padding: '0.5rem 1rem', borderRadius: 6,
             background: 'rgba(201,169,110,0.15)', border: '1px solid rgba(201,169,110,0.4)',
-            color: '#c9a96e', fontSize: '0.78rem', textDecoration: 'none', whiteSpace: 'nowrap',
+            color: '#cdba93', fontSize: '0.78rem', textDecoration: 'none', whiteSpace: 'nowrap',
           }}
         >
           Invite your team
@@ -66,7 +66,7 @@ export default function OnboardedBanner() {
         <button
           onClick={() => setVisible(false)}
           style={{
-            background: 'none', border: 'none', color: '#5a5870',
+            background: 'none', border: 'none', color: '#8290a3',
             fontSize: '0.9rem', cursor: 'pointer', padding: '0.25rem',
           }}
           aria-label="Dismiss"

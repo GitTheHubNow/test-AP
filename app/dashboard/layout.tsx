@@ -63,7 +63,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-wordmark">Memoriam</div>
+          <div className="sidebar-logo-wordmark">Absolute Posterity</div>
           <div className="sidebar-logo-sub">Memorial Platform</div>
         </div>
 

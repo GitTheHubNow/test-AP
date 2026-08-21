@@ -19,7 +19,7 @@ import {
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 function displayName(m: {
@@ -45,6 +45,8 @@ function formatPrice(p: number | null): string {
 }
 
 export default async function ProductsPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -52,13 +54,13 @@ export default async function ProductsPage({ params }: Props) {
   // every org staff member except the literal creator. This page creates
   // new product requests, so 'edit' is the right permission level.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       title:         true,
@@ -76,7 +78,7 @@ export default async function ProductsPage({ params }: Props) {
 
   const requests = featureEnabled
     ? await prisma.productRequest.findMany({
-        where:   { memorialId: params.memorialId },
+        where:   { memorialId: memorialId },
         orderBy: { requestedAt: 'desc' },
       })
     : [];
@@ -91,7 +93,7 @@ export default async function ProductsPage({ params }: Props) {
             <h1 style={styles.title}>Product Requests</h1>
             <p style={styles.subtitle}>{name}</p>
           </div>
-          <Link href={`/dashboard/memorial/${params.memorialId}/qr`} style={styles.backLink}>
+          <Link href={`/dashboard/memorial/${memorialId}/qr`} style={styles.backLink}>
             ← Back to memorial
           </Link>
         </div>
@@ -111,7 +113,7 @@ export default async function ProductsPage({ params }: Props) {
             {/* ── Create form ── */}
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>New Request</h2>
-              <ProductRequestForm memorialId={params.memorialId} />
+              <ProductRequestForm memorialId={memorialId} />
             </div>
 
             {/* ── Existing requests ── */}
@@ -168,7 +170,7 @@ export default async function ProductsPage({ params }: Props) {
                         {/* Only REQUESTED can be deleted — handled client-side */}
                         {r.status === 'REQUESTED' && (
                           <form
-                            action={`/api/memorials/${params.memorialId}/products/${r.id}`}
+                            action={`/api/memorials/${memorialId}/products/${r.id}`}
                             method="DELETE"
                             style={{ marginTop: '0.5rem' }}
                           >
@@ -226,7 +228,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1.4rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   subtitle: {
@@ -267,14 +269,14 @@ const styles: Record<string, React.CSSProperties> = {
     margin:       '0 0 1.25rem',
     fontSize:     '0.95rem',
     fontWeight:   600,
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     fontFamily:   'system-ui, sans-serif',
     display:      'flex',
     alignItems:   'center',
     gap:          '0.5rem',
   },
   count: {
-    background:   '#0a0a16',
+    background:   '#4f5d75',
     color:        '#f0ece4',
     borderRadius: '999px',
     fontSize:     '0.7rem',
@@ -313,7 +315,7 @@ const styles: Record<string, React.CSSProperties> = {
   productType: {
     fontSize:   '0.9rem',
     fontWeight: 600,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   qty: {
@@ -340,7 +342,7 @@ const styles: Record<string, React.CSSProperties> = {
   price: {
     margin:     '0.3rem 0',
     fontSize:   '0.82rem',
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   cardMeta: {
@@ -357,7 +359,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
   },
   footerLink: {
-    color:          '#c9a96e',
+    color:          '#cdba93',
     fontSize:       '0.85rem',
     fontFamily:     'system-ui, sans-serif',
     fontWeight:     600,

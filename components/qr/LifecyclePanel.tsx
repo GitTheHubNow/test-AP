@@ -159,7 +159,7 @@ export default function LifecyclePanel({ memorialId }: Props) {
       <div style={styles.card}>
         <p style={styles.mutedNote}>
           The QR lifecycle feature is not enabled for your organisation yet.
-          Contact Memoriam support to turn this on.
+          Contact Absolute Posterity support to turn this on.
         </p>
       </div>
     );
@@ -392,8 +392,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop:    '1.5rem',
     padding:      '0.7rem',
     borderRadius: 6,
-    border:       '1px solid #c9a96e',
-    background:   'linear-gradient(135deg, #c9a96e, #e8c87e)',
+    border:       '1px solid #cdba93',
+    background:   'linear-gradient(135deg, #cdba93, #e8c87e)',
     color:        '#1a0e05',
     fontFamily:   "'Cormorant Garamond', serif",
     fontSize:     '1rem',

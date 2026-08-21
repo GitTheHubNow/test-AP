@@ -8,24 +8,26 @@ import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string; memoryId: string } }
+  { params }: { params: Promise<{ memorialId: string; memoryId: string }> }
 ) {
+  const { memorialId, memoryId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return CommonErrors.unauthorized();
 
     // Validate both params
-    const memorialValidation = validateParam(params.memorialId, MemorialIdSchema);
+    const memorialValidation = validateParam(memorialId, MemorialIdSchema);
     if (!memorialValidation.success) return CommonErrors.badRequest(memorialValidation.error);
 
-    const memoryValidation = validateParam(params.memoryId, MemoryIdSchema);
+    const memoryValidation = validateParam(memoryId, MemoryIdSchema);
     if (!memoryValidation.success) return CommonErrors.badRequest(memoryValidation.error);
 
     // Check org-scoped access and read-only
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: { readOnly: true },
     });
 
@@ -35,7 +37,7 @@ export async function POST(
     // Reject memory with audit
     await prisma.$transaction(async (tx) => {
       await tx.memory.update({
-        where: { id: params.memoryId },
+        where: { id: memoryId },
         data: {
           status: 'REJECTED',
           rejectedAt: new Date(),
@@ -45,12 +47,12 @@ export async function POST(
       await tx.auditEvent.create({
         data: {
           entityType: EntityType.MEMORY,
-          entityId: params.memoryId,
+          entityId: memoryId,
           action: AuditAction.REJECT,
           actorId: userId,
           actorRole: ActorRole.FUNERAL_HOME,
           reasonCode: ReasonCode.MODERATION,
-          metadata: { memorialId: params.memorialId },
+          metadata: { memorialId: memorialId },
         },
       });
     });

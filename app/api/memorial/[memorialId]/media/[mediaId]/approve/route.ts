@@ -21,8 +21,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string; mediaId: string } }
+  { params }: { params: Promise<{ memorialId: string; mediaId: string }> }
 ) {
+  const { memorialId, mediaId } = await params;
+
   try {
     // 1. AUTHENTICATION
     const { userId } = await auth();
@@ -35,11 +37,11 @@ export async function POST(
     }
 
     // 2. VERIFY ORG-SCOPED ACCESS
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     // 3. VERIFY MEDIA EXISTS & BELONGS TO MEMORIAL
     const media = await prisma.media.findUnique({
-      where: { id: params.mediaId },
+      where: { id: mediaId },
       select: { 
         memorialId: true,
         status: true,
@@ -53,7 +55,7 @@ export async function POST(
       );
     }
 
-    if (media.memorialId !== params.memorialId) {
+    if (media.memorialId !== memorialId) {
       return NextResponse.json(
         { success: false, error: 'Media not found' },
         { status: 404 }
@@ -62,7 +64,7 @@ export async function POST(
 
     // 4. UPDATE STATUS TO APPROVED
     await prisma.media.update({
-      where: { id: params.mediaId },
+      where: { id: mediaId },
       data: {
         status: MediaStatus.APPROVED,
         rejectedAt: null, // Clear rejection timestamp if re-approving

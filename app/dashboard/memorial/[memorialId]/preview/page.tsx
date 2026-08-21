@@ -7,10 +7,12 @@ import { PreviewWorkspace } from '@/components/preview/PreviewWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function PreviewPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -18,13 +20,13 @@ export default async function PreviewPage({ params }: Props) {
   // every org staff member except the literal creator. Read-only preview,
   // so 'read' is the right permission level.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:                    true,
       title:                 true,
@@ -64,7 +66,7 @@ export default async function PreviewPage({ params }: Props) {
 
   // Fetch approved memories for the preview
   const memories = await prisma.memory.findMany({
-    where:   { memorialId: params.memorialId, status: MemoryStatus.APPROVED, isGuestBook: false },
+    where:   { memorialId: memorialId, status: MemoryStatus.APPROVED, isGuestBook: false },
     orderBy: [{ featured: 'desc' }, { createdAt: 'desc' }],
     select: {
       id:          true,
@@ -84,7 +86,7 @@ export default async function PreviewPage({ params }: Props) {
   });
 
   const guestBookEntries = await prisma.memory.findMany({
-    where:   { memorialId: params.memorialId, status: MemoryStatus.APPROVED, isGuestBook: true },
+    where:   { memorialId: memorialId, status: MemoryStatus.APPROVED, isGuestBook: true },
     orderBy: { createdAt: 'desc' },
     select:  { id: true, authorName: true, message: true, createdAt: true },
   });

@@ -25,8 +25,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
 
@@ -37,10 +39,10 @@ export async function GET(
       );
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: {
         title: true,
         status: true,
@@ -69,8 +71,8 @@ export async function GET(
     // implementation — this route previously had its own inline copy of
     // the same generate-if-missing logic, written before that helper
     // existed.
-    const publicToken = await ensurePublicToken(params.memorialId, memorial.publicToken);
-    const urlSlug = memorial.slug ?? params.memorialId;
+    const publicToken = await ensurePublicToken(memorialId, memorial.publicToken);
+    const urlSlug = memorial.slug ?? memorialId;
     const publicUrl = `${appUrl}/v/${urlSlug}?key=${publicToken}`;
 
     const result = await generateQRCode(publicUrl, {

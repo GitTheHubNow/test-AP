@@ -37,8 +37,8 @@ interface Branding {
 // ── Defaults matching MEMORIAM_DEFAULTS ───────────────────────────────────────
 
 const DEFAULTS = {
-  primaryColor:   '#c9a96e',
-  secondaryColor: '#0a0a16',
+  primaryColor:   '#cdba93',
+  secondaryColor: '#4f5d75',
 };
 
 // ── Hex validation ────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ function BrandPreview({
             <span style={{ fontSize: '0.5rem', letterSpacing: '0.3em', textTransform: 'uppercase', color: primaryColor, opacity: 0.7 }}>
               Memorial Service
             </span>
-            <span style={{ fontSize: '0.85rem', fontWeight: 300, color: '#f5f0e8', letterSpacing: '0.04em', fontFamily: 'Georgia, serif' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 300, color: '#f4f1ea', letterSpacing: '0.04em', fontFamily: 'Georgia, serif' }}>
               {brandName || 'Your Funeral Home'}
             </span>
           </div>
@@ -111,14 +111,14 @@ function BrandPreview({
           gap:        '0.25rem',
         }}>
           {supportEmail && (
-            <p style={{ margin: 0, fontSize: '0.62rem', color: '#3a3a5a', fontFamily: 'Arial, sans-serif' }}>
+            <p style={{ margin: 0, fontSize: '0.62rem', color: '#6b7890', fontFamily: 'Arial, sans-serif' }}>
               Questions?{' '}
               <span style={{ color: primaryColor }}>{supportEmail}</span>
             </p>
           )}
           {poweredByEnabled && (
             <p style={{ margin: 0, fontSize: '0.52rem', color: '#2a2a40', letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: 'Arial, sans-serif' }}>
-              Powered by Memoriam
+              Powered by Absolute Posterity
             </p>
           )}
         </div>
@@ -182,11 +182,11 @@ export function BrandingForm() {
     setSaved(false);
 
     if (!isHex(primaryColor)) {
-      setError('Primary colour must be a 6-digit hex value e.g. #c9a96e');
+      setError('Primary colour must be a 6-digit hex value e.g. #cdba93');
       return;
     }
     if (!isHex(secondaryColor)) {
-      setError('Secondary colour must be a 6-digit hex value e.g. #0a0a16');
+      setError('Secondary colour must be a 6-digit hex value e.g. #4f5d75');
       return;
     }
 
@@ -337,7 +337,7 @@ export function BrandingForm() {
           {/* Primary colour */}
           <div style={s.field}>
             <label style={s.label}>Primary colour</label>
-            <p style={s.hint}>Accent colour — used for links, borders, and highlights. Default: #c9a96e</p>
+            <p style={s.hint}>Accent colour — used for links, borders, and highlights. Default: #cdba93</p>
             <div style={s.colorRow}>
               <input
                 type="color"
@@ -349,7 +349,7 @@ export function BrandingForm() {
                 type="text"
                 value={primaryRaw}
                 onChange={e => handlePrimaryText(e.target.value)}
-                placeholder="#c9a96e"
+                placeholder="#cdba93"
                 maxLength={7}
                 style={{ ...s.input, width: '120px', fontFamily: 'monospace' }}
               />
@@ -366,7 +366,7 @@ export function BrandingForm() {
           {/* Secondary colour */}
           <div style={s.field}>
             <label style={s.label}>Background colour</label>
-            <p style={s.hint}>Page background on public QR pages. Default: #0a0a16</p>
+            <p style={s.hint}>Page background on public QR pages. Default: #4f5d75</p>
             <div style={s.colorRow}>
               <input
                 type="color"
@@ -378,7 +378,7 @@ export function BrandingForm() {
                 type="text"
                 value={secondaryRaw}
                 onChange={e => handleSecondaryText(e.target.value)}
-                placeholder="#0a0a16"
+                placeholder="#4f5d75"
                 maxLength={7}
                 style={{ ...s.input, width: '120px', fontFamily: 'monospace' }}
               />
@@ -407,7 +407,7 @@ export function BrandingForm() {
 
           {/* Powered by toggle */}
           <div style={s.field}>
-            <label style={s.label}>Show "Powered by Memoriam"</label>
+            <label style={s.label}>Show "Powered by Absolute Posterity"</label>
             <p style={s.hint}>Only visible when white label is not active.</p>
             <div style={s.toggleRow}>
               <button
@@ -416,7 +416,7 @@ export function BrandingForm() {
                 onClick={() => setPoweredByEnabled(p => !p)}
                 style={{
                   ...s.toggle,
-                  background: poweredByEnabled ? '#0a0a16' : 'rgba(10,10,22,0.15)',
+                  background: poweredByEnabled ? '#4f5d75' : 'rgba(10,10,22,0.15)',
                 }}
                 type="button"
               >
@@ -529,7 +529,7 @@ const s: Record<string, React.CSSProperties> = {
     border:       '1px solid rgba(10,10,22,0.18)',
     borderRadius: '6px',
     fontSize:     '0.9rem',
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     background:   '#fff',
     boxSizing:    'border-box',
     outline:      'none',
@@ -566,7 +566,7 @@ const s: Record<string, React.CSSProperties> = {
     gap:          '0.75rem',
     marginBottom: '0.6rem',
     padding:      '0.6rem',
-    background:   '#0a0a16',
+    background:   '#4f5d75',
     borderRadius: '6px',
     width:        'fit-content',
   },
@@ -593,7 +593,7 @@ const s: Record<string, React.CSSProperties> = {
     padding:      '0.5rem 1rem',
     fontSize:     '0.85rem',
     fontFamily:   'system-ui, sans-serif',
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     cursor:       'pointer',
   },
   toggleRow: {
@@ -637,7 +637,7 @@ const s: Record<string, React.CSSProperties> = {
     margin:     '0 0 0.75rem',
   },
   saveBtn: {
-    background:    '#0a0a16',
+    background:    '#4f5d75',
     color:         '#f0ece4',
     border:        'none',
     borderRadius:  '7px',

@@ -46,16 +46,18 @@ import type { QRState, QRConfigUpdate } from '@/types/v2';
 
 export const GET = withErrorHandling(async (
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) => {
+  const { id } = await params;
+
   const { userId } = await auth();
   if (!userId) return CommonErrors.unauthorized();
 
-  await assertMemorialAccess(params.id, userId, 'read');
+  await assertMemorialAccess(id, userId, 'read');
   await assertFeatureEnabled(userId, 'qrLifecycle');
 
   const memorial = await prisma.memorial.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: {
       id:                true,
       slug:              true,
@@ -80,7 +82,7 @@ export const GET = withErrorHandling(async (
   if (!publicToken) {
     publicToken = generatePublicToken();
     await prisma.memorial.update({
-      where: { id: params.id },
+      where: { id: id },
       data:  { publicToken },
     });
   }
@@ -143,19 +145,21 @@ export const GET = withErrorHandling(async (
 
 export const PUT = withErrorHandling(async (
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) => {
+  const { id } = await params;
+
   const { userId } = await auth();
   if (!userId) return CommonErrors.unauthorized();
 
-  await assertMemorialAccess(params.id, userId, 'edit');
+  await assertMemorialAccess(id, userId, 'edit');
   await assertFeatureEnabled(userId, 'qrLifecycle');
 
   const body: QRConfigUpdate = await req.json();
 
   // Fetch current state for transition validation
   const current = await prisma.memorial.findUnique({
-    where:  { id: params.id },
+    where:  { id: id },
     select: { qrState: true },
   });
   if (!current) return CommonErrors.notFound('Memorial');
@@ -225,7 +229,7 @@ export const PUT = withErrorHandling(async (
   if (body.pamphletMessage   !== undefined) data.pamphletMessage   = body.pamphletMessage?.trim()   || null;
 
   const updated = await prisma.memorial.update({
-    where:  { id: params.id },
+    where:  { id: id },
     data,
     select: {
       id:                true,

@@ -5,23 +5,25 @@ import { HandoverWorkspace } from '@/components/handover/HandoverWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function HandoverPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   // FIXED: previously a manual `ownerId !== userId` check, which blocked
   // every org staff member except the literal creator.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       title:         true,

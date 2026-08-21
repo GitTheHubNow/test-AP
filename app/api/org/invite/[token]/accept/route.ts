@@ -29,15 +29,35 @@ import { OrgInviteStatus } from '@prisma/client';
 
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { token: string } },
+  { params }: { params: Promise<{ token: string }> },
 ) {
+  const { token } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'You must be signed in to accept an invite' }, { status: 401 });
   }
 
+  try {
+    return await acceptInvite(token, userId);
+  } catch (err) {
+    // Every other failure mode in this route returns a clean JSON error
+    // (expired, wrong email, already accepted, etc.) — this catches the
+    // ones that can't be anticipated (Clerk API blip, transaction
+    // failure) so accepting an invite fails gracefully instead of
+    // showing the person a raw framework error page mid-onboarding.
+    console.error('[org/invite/accept] Unexpected error:', err);
+    return NextResponse.json(
+      { success: false, error: 'Something went wrong accepting this invite. Please try again.' },
+      { status: 500 },
+    );
+  }
+}
+
+async function acceptInvite(token: string, userId: string) {
+
   const invite = await prisma.orgInvite.findUnique({
-    where: { token: params.token },
+    where: { token },
   });
 
   if (!invite) {

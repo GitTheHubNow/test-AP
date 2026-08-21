@@ -50,11 +50,11 @@ export default async function OrgSettingsPage() {
             <div style={styles.cardIconWrap}>
               {/* Simple palette icon via SVG */}
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="#c9a96e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="13.5" cy="6.5" r=".5" fill="#c9a96e"/>
-                <circle cx="17.5" cy="10.5" r=".5" fill="#c9a96e"/>
-                <circle cx="8.5"  cy="7.5"  r=".5" fill="#c9a96e"/>
-                <circle cx="6.5"  cy="12.5" r=".5" fill="#c9a96e"/>
+                stroke="#cdba93" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="13.5" cy="6.5" r=".5" fill="#cdba93"/>
+                <circle cx="17.5" cy="10.5" r=".5" fill="#cdba93"/>
+                <circle cx="8.5"  cy="7.5"  r=".5" fill="#cdba93"/>
+                <circle cx="6.5"  cy="12.5" r=".5" fill="#cdba93"/>
                 <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688
                   0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0
                   0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012
@@ -99,7 +99,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1.4rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   subtitle: {
@@ -126,7 +126,7 @@ const styles: Record<string, React.CSSProperties> = {
   cardIconWrap: {
     width:           '40px',
     height:          '40px',
-    background:      '#0a0a16',
+    background:      '#4f5d75',
     borderRadius:    '8px',
     display:         'flex',
     alignItems:      'center',
@@ -137,7 +137,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1rem',
     fontWeight: 600,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
     lineHeight: 1.2,
   },

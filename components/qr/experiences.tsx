@@ -31,7 +31,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
         fontSize:      '0.6rem',
         letterSpacing: '0.24em',
         textTransform: 'uppercase',
-        color:         '#5a5870',
+        color:         '#8290a3',
         fontFamily:    'Arial, sans-serif',
       }}
     >
@@ -52,7 +52,7 @@ function FieldValue({
       style={{
         margin:     0,
         fontSize:   large ? '1.05rem' : '0.9rem',
-        color:      '#f5f0e8',
+        color:      '#f4f1ea',
         fontWeight: 300,
         lineHeight: 1.5,
       }}
@@ -111,7 +111,7 @@ function DeceasedHeading({
           margin:        0,
           fontSize:      'clamp(1.6rem, 5vw, 2.2rem)',
           fontWeight:    300,
-          color:         '#f5f0e8',
+          color:         '#f4f1ea',
           lineHeight:    1.2,
           letterSpacing: '0.02em',
         }}
@@ -210,7 +210,7 @@ export function PamphletView({
               style={{
                 margin:     '0.4rem 0 0',
                 fontSize:   '0.78rem',
-                color:      '#5a5870',
+                color:      '#8290a3',
                 fontStyle:  'italic',
                 fontFamily: 'Arial, sans-serif',
               }}
@@ -289,7 +289,7 @@ export function WaitingView({
       <p
         style={{
           fontSize:   '0.9rem',
-          color:      '#5a5870',
+          color:      '#8290a3',
           lineHeight: 1.7,
           margin:     '0 auto 1.5rem',
           maxWidth:   400,
@@ -321,14 +321,14 @@ export function WaitingView({
               fontSize:      '0.6rem',
               letterSpacing: '0.2em',
               textTransform: 'uppercase',
-              color:         '#5a5870',
+              color:         '#8290a3',
               fontFamily:    'Arial, sans-serif',
             }}
           >
             Memorial opens
           </span>
           <span
-            style={{ fontSize: '1rem', color: '#f5f0e8', fontWeight: 300 }}
+            style={{ fontSize: '1rem', color: '#f4f1ea', fontWeight: 300 }}
           >
             {fmtDate(unlockAt)}
           </span>
@@ -381,7 +381,7 @@ export function MemorialOpenView({
       <p
         style={{
           fontSize:   '0.88rem',
-          color:      '#5a5870',
+          color:      '#8290a3',
           lineHeight: 1.7,
           fontFamily: 'Arial, sans-serif',
           margin:     '0 0 1.5rem',
@@ -431,7 +431,7 @@ export function PrivateView({ theme }: { theme: ResolvedTheme }) {
         style={{
           fontSize:   '1.1rem',
           fontWeight: 300,
-          color:      '#f5f0e8',
+          color:      '#f4f1ea',
           margin:     '0 0 0.75rem',
         }}
       >
@@ -440,7 +440,7 @@ export function PrivateView({ theme }: { theme: ResolvedTheme }) {
       <p
         style={{
           fontSize:   '0.85rem',
-          color:      '#3a3a5a',
+          color:      '#6b7890',
           margin:     0,
           fontFamily: 'Arial, sans-serif',
         }}
@@ -467,7 +467,7 @@ export function ArchivedView({
           fontSize:     '1.8rem',
           marginBottom: '1.5rem',
           opacity:      0.15,
-          color:        '#5a5870',
+          color:        '#8290a3',
         }}
       >
         ✦
@@ -478,7 +478,7 @@ export function ArchivedView({
       <p
         style={{
           fontSize:   '0.85rem',
-          color:      '#3a3a5a',
+          color:      '#6b7890',
           lineHeight: 1.7,
           fontFamily: 'Arial, sans-serif',
           margin:     '0 auto',

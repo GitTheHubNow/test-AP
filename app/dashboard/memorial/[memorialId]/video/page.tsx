@@ -4,9 +4,11 @@ import { prisma }             from '@/lib/prisma';
 import { getPublicUrl }       from '@/lib/upload-shared';
 import { TributeVideoCreator } from '@/components/video/TributeVideoCreator';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 function toProxyUrl(blobKey: string): string {
@@ -17,6 +19,8 @@ function toProxyUrl(blobKey: string): string {
 }
 
 export default async function VideoPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -24,13 +28,13 @@ export default async function VideoPage({ params }: Props) {
   // every org staff member except the literal creator. This page has an
   // editor (TributeVideoCreator), so 'edit' is the right permission level.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       title:         true,
@@ -39,6 +43,8 @@ export default async function VideoPage({ params }: Props) {
       preferredName: true,
       birthDate:     true,
       deathDate:     true,
+      funeralDate:   true,
+      tributeUnlockOverride: true,
       tributeVideo: {
         select: {
           id:             true,
@@ -57,10 +63,26 @@ export default async function VideoPage({ params }: Props) {
 
   if (!memorial) notFound();
 
+  // Server-side enforcement of the same gate the sidebar reflects —
+  // a locked nav item alone wouldn't stop someone typing this URL
+  // directly. Staff can still unlock early right here (e.g. family
+  // arrived with a USB stick of photos ready to go on day one).
+  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+    return (
+      <SectionLockedScreen
+        memorialId={memorial.id}
+        sectionName="Tribute Video"
+        daysLeft={daysLeft}
+        hasFuneralDate={Boolean(memorial.funeralDate)}
+      />
+    );
+  }
+
   // Photos marked forTribute
   const photos = await prisma.collectionItem.findMany({
     where: {
-      memorialId: params.memorialId,
+      memorialId: memorialId,
       type:       'PHOTO',
       forTribute: true,
       status:     'APPROVED',

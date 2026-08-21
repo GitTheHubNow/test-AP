@@ -22,15 +22,17 @@ import { renderProductOrderEmail } from '@/lib/email-templates/product-order-ema
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    const memorial = await assertMemorialAccess(params.id, userId);
+    const memorial = await assertMemorialAccess(id, userId);
     if (!memorial) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
@@ -38,7 +40,7 @@ export async function GET(
     await assertFeatureEnabled(userId, 'products');
 
     const requests = await prisma.productRequest.findMany({
-      where:   { memorialId: params.id },
+      where:   { memorialId: id },
       orderBy: { requestedAt: 'desc' },
       select: {
         id:              true,
@@ -67,15 +69,17 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    const memorial = await assertMemorialAccess(params.id, userId);
+    const memorial = await assertMemorialAccess(id, userId);
     if (!memorial) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
@@ -109,7 +113,7 @@ export async function POST(
 
     const request = await prisma.productRequest.create({
       data: {
-        memorialId:     params.id,
+        memorialId:     id,
         organisationId: orgId ?? undefined,
         productType:    body.productType,
         quantity,
@@ -134,14 +138,14 @@ export async function POST(
     if (orderEmail) {
       const [memorial, funeralCase, org] = await Promise.all([
         prisma.memorial.findUnique({
-          where:  { id: params.id },
+          where:  { id: id },
           select: {
             firstName: true, lastName: true, preferredName: true, title: true,
             funeralDate: true, slug: true, publicToken: true,
           },
         }),
         prisma.funeralCase.findUnique({
-          where:  { memorialId: params.id },
+          where:  { memorialId: id },
           select: { caseRef: true },
         }),
         orgId
@@ -175,9 +179,9 @@ export async function POST(
         // never been opened, so a product order never goes out with a
         // ?key=null/undefined URL.
         publicUrl:  memorial
-          ? `${getAppUrl()}/v/${memorial.slug ?? params.id}?key=${await ensurePublicToken(params.id, memorial.publicToken)}`
-          : `${getAppUrl()}/dashboard/memorial/${params.id}/qr`,
-        requestUrl: `${getAppUrl()}/dashboard/memorial/${params.id}/products`,
+          ? `${getAppUrl()}/v/${memorial.slug ?? id}?key=${await ensurePublicToken(id, memorial.publicToken)}`
+          : `${getAppUrl()}/dashboard/memorial/${id}/qr`,
+        requestUrl: `${getAppUrl()}/dashboard/memorial/${id}/products`,
       });
 
       sendEmailAsync({

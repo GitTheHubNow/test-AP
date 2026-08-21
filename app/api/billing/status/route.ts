@@ -1,27 +1,30 @@
 /**
  * GET /api/billing/status
  *
- * Returns the current org's plan, subscription status, and usage.
- * Used by the billing dashboard page and the nav to show upgrade prompts.
+ * Returns the current org's subscription status and usage/billing
+ * estimate.
+ *
+ * CHANGED — was plan-tier + limits + feature-flags. Under the base +
+ * per-memorial-metered model there's one plan for everyone, no limits
+ * to hit, and every feature is available to any org with an active
+ * subscription — so `plan`, `limits`, and `features` are gone from this
+ * response. Replaced with a running total of what this month's usage
+ * will actually cost.
  *
  * Response shape:
  * {
- *   plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE'
  *   subscriptionStatus: 'NONE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'INCOMPLETE'
  *   currentPeriodEnd: string | null
  *   cancelAtPeriodEnd: boolean
  *   trialEndsAt: string | null
+ *   billing: {
+ *     baseFeeAud: number
+ *     perMemorialAud: number
+ *   }
  *   usage: {
  *     memorialsThisMonth: number
  *     videosThisMonth: number
- *     memorialLimit: number   (-1 = unlimited)
- *     videoLimit: number      (-1 = unlimited)
- *   }
- *   features: {
- *     guestBook: boolean
- *     analytics: boolean
- *     customBranding: boolean
- *     apiAccess: boolean
+ *     estimatedMemorialChargeAud: number
  *   }
  * }
  */
@@ -30,7 +33,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { getOrgForUser }              from '@/lib/tenant';
 import { getUsage }                   from '@/lib/entitlement';
-import { PLAN_LIMITS, PLAN_DISPLAY }  from '@/lib/stripe';
+import { BILLING_DISPLAY }            from '@/lib/stripe';
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,28 +44,22 @@ export async function GET(req: NextRequest) {
 
     const org   = await getOrgForUser(userId);
     const usage = await getUsage(org.id);
-    const limits = PLAN_LIMITS[usage.plan];
 
     return NextResponse.json({
       success: true,
       data: {
-        plan:               usage.plan,
-        planDisplay:        PLAN_DISPLAY[usage.plan],
         subscriptionStatus: org.subscriptionStatus,
         currentPeriodEnd:   org.currentPeriodEnd?.toISOString() ?? null,
         cancelAtPeriodEnd:  org.cancelAtPeriodEnd,
         trialEndsAt:        org.trialEndsAt?.toISOString() ?? null,
-        usage: {
-          memorialsThisMonth: usage.memorialsThisMonth,
-          videosThisMonth:    usage.videosThisMonth,
-          memorialLimit:      usage.memorialLimit,
-          videoLimit:         usage.videoLimit,
+        billing: {
+          baseFeeAud:     BILLING_DISPLAY.baseFeeAud,
+          perMemorialAud: BILLING_DISPLAY.perMemorialAud,
         },
-        features: {
-          guestBook:      limits.guestBook,
-          analytics:      limits.analytics,
-          customBranding: limits.customBranding,
-          apiAccess:      limits.apiAccess,
+        usage: {
+          memorialsThisMonth:         usage.memorialsThisMonth,
+          videosThisMonth:            usage.videosThisMonth,
+          estimatedMemorialChargeAud: usage.estimatedMemorialChargeAud,
         },
       },
     });

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface AnalyticsPageProps {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 /**
@@ -19,17 +19,19 @@ interface AnalyticsPageProps {
  * Phase 9
  */
 export default async function AnalyticsPage({ params }: AnalyticsPageProps) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: { title: true, id: true },
   });
 
@@ -46,14 +48,14 @@ export default async function AnalyticsPage({ params }: AnalyticsPageProps) {
               <p className="text-sm text-gray-500 mt-1">{memorial.title}</p>
             </div>
             <Link
-              href={`/dashboard/memorial/${params.memorialId}/settings`}
+              href={`/dashboard/memorial/${memorialId}/settings`}
               className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
             >
               Settings →
             </Link>
           </div>
 
-          <AnalyticsPanel memorialId={params.memorialId} />
+          <AnalyticsPanel memorialId={memorialId} />
 
         </div>
       </div>

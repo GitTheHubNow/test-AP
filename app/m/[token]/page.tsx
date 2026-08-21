@@ -17,12 +17,14 @@ import { prisma } from '@/lib/prisma';
 import { ensurePublicToken } from '@/lib/qr';
 
 interface Props {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
 export default async function LegacyMemorialRedirect({ params }: Props) {
+  const { token } = await params;
+
   const memorial = await prisma.memorial.findFirst({
-    where:  { OR: [{ id: params.token }, { qrTokenHash: params.token }] },
+    where:  { OR: [{ id: token }, { qrTokenHash: token }] },
     select: { id: true, slug: true, publicToken: true },
   });
 

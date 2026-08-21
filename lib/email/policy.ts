@@ -32,6 +32,8 @@ export type EmailType =
   | 'MEMORIAL_SUSPENDED'    // on expiry → owner (cron)
   | 'PRODUCT_STATUS'        // product request status change → opt-in only
   | 'APPROVED_CONFIRMATION' // SUPPRESSED — owner just did the action
+  | 'LAST_CHANCE_UPLOAD'    // 5 days before service → family (cron)
+  | 'PUBLISH_PROMPT'        // 1 day before service → owner/staff (cron)
 
 // ── Platform defaults ─────────────────────────────────────────────────────────
 // true  = send by default, org can opt out
@@ -49,15 +51,23 @@ const PLATFORM_DEFAULTS: Record<EmailType, boolean> = {
   MEMORIAL_SUSPENDED:    true,
   PRODUCT_STATUS:        false,  // opt-in only
   APPROVED_CONFIRMATION: false,  // permanently suppressed — noise
+  LAST_CHANCE_UPLOAD:    true,
+  PUBLISH_PROMPT:        true,
 };
 
 // ── Batch cooldown windows (ms) ───────────────────────────────────────────────
 // For digest types: track last-sent in DB metadata, suppress within window.
 
 const BATCH_COOLDOWN_MS: Partial<Record<EmailType, number>> = {
-  NEW_MEMORY_DIGEST: 60 * 60 * 1000,       // 1 hour
-  UPLOAD_DIGEST:     60 * 60 * 1000,       // 1 hour
-  STALE_PENDING:     7 * 24 * 60 * 60 * 1000, // 7 days
+  NEW_MEMORY_DIGEST:  60 * 60 * 1000,       // 1 hour
+  UPLOAD_DIGEST:      60 * 60 * 1000,       // 1 hour
+  STALE_PENDING:      7 * 24 * 60 * 60 * 1000, // 7 days
+  // One-shot-per-memorial reminders — the cron job also checks its own
+  // sentAt-style flag before calling shouldSend, but a long cooldown
+  // here is a second line of defence against an accidental double send
+  // (e.g. cron running twice in the same window).
+  LAST_CHANCE_UPLOAD:  6 * 24 * 60 * 60 * 1000, // 6 days
+  PUBLISH_PROMPT:      2 * 24 * 60 * 60 * 1000, // 2 days
 };
 
 // ── NotificationPrefs shape stored in Organisation.notificationPrefs ──────────

@@ -5,10 +5,12 @@ import { CollectionWorkspace } from '@/components/collection/CollectionWorkspace
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function CollectionPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -16,13 +18,13 @@ export default async function CollectionPage({ params }: Props) {
   // every org staff member except the literal creator. This page can
   // generate invite links and manage content, so 'edit' is right.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:             true,
       title:          true,

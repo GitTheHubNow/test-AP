@@ -5,6 +5,8 @@
  * All return HTML strings compatible with the existing sendEmailAsync helper.
  */
 
+import { escapeHtml } from '@/lib/htmlEscape';
+
 // ── Shared styles ──────────────────────────────────────────────────────────
 
 const base = (content: string) => `
@@ -85,6 +87,14 @@ export function renderSendAfterDaysEmail({
   qrCodeDataUrl,
   ownerName,
 }: SendAfterDaysEmailParams): string {
+  // Escape free-text values before they go into the template — see
+  // lib/htmlEscape.ts. memorialTitle and ownerName are user-typed;
+  // publicUrl is system-built but escaped too as cheap defence-in-depth
+  // since it's placed inside both an href and visible link text below.
+  memorialTitle = escapeHtml(memorialTitle);
+  ownerName     = ownerName ? escapeHtml(ownerName) : ownerName;
+  publicUrl     = escapeHtml(publicUrl);
+
   const qrBlock = qrCodeDataUrl
     ? `<div style="text-align:center;margin:28px 0;">
         <img src="${qrCodeDataUrl}" width="180" height="180" alt="QR Code" style="border-radius:8px;border:1px solid #ece8e3;" />
@@ -121,6 +131,9 @@ export function renderExpiryWarningEmail({
   renewUrl,
   yearsRemaining,
 }: ExpiryWarningEmailParams): string {
+  memorialTitle = escapeHtml(memorialTitle);
+  renewUrl      = escapeHtml(renewUrl);
+
   const expiryFormatted = expiresAt.toLocaleDateString('en-AU', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -150,6 +163,9 @@ export function renderMemorialSuspendedEmail({
   renewUrl,
   expiresAt,
 }: MemorialSuspendedEmailParams): string {
+  memorialTitle = escapeHtml(memorialTitle);
+  renewUrl      = escapeHtml(renewUrl);
+
   const expiryFormatted = expiresAt.toLocaleDateString('en-AU', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -178,6 +194,9 @@ export function renderStalePendingEmail({
   staleCount,
   moderationUrl,
 }: StalePendingEmailParams): string {
+  memorialTitle = escapeHtml(memorialTitle);
+  moderationUrl = escapeHtml(moderationUrl);
+
   return base(`
     ${h1(`${staleCount} ${staleCount === 1 ? 'memory needs' : 'memories need'} your attention`)}
     ${subheading(memorialTitle)}
@@ -186,5 +205,83 @@ export function renderStalePendingEmail({
     ${cta(moderationUrl, 'Review Pending Memories →')}
     ${divider()}
     ${small('You can approve, reject, or keep memories pending from your dashboard. Memories will not be auto-rejected.')}
+  `);
+}
+
+// ── Template 5: Last chance to upload — sent to family/nominated contact ──
+
+export interface LastChanceUploadEmailParams {
+  memorialTitle: string;
+  familyName?:   string;
+  uploadUrl:     string;
+  funeralHomeName: string;
+  daysUntilService: number;
+}
+
+export function renderLastChanceUploadEmail({
+  memorialTitle,
+  familyName,
+  uploadUrl,
+  funeralHomeName,
+  daysUntilService,
+}: LastChanceUploadEmailParams): string {
+  memorialTitle   = escapeHtml(memorialTitle);
+  familyName      = familyName ? escapeHtml(familyName) : familyName;
+  uploadUrl       = escapeHtml(uploadUrl);
+  funeralHomeName = escapeHtml(funeralHomeName);
+
+  const greeting = familyName ? `Dear ${familyName},` : 'Hello,';
+  const whenText = daysUntilService > 0
+    ? `in the next ${daysUntilService} day${daysUntilService === 1 ? '' : 's'}`
+    : 'very soon';
+
+  return base(`
+    ${h1(`We're preparing ${memorialTitle}'s memorial`)}
+    ${subheading(`A message from ${funeralHomeName}`)}
+    ${body(greeting)}
+    ${body(`We'll be putting together the memorial and tribute video for <strong>${memorialTitle}</strong> ${whenText}. If you have any last photos or memories you'd like included, now is the time to share them.`)}
+    ${cta(uploadUrl, 'Upload Photos & Memories →')}
+    ${divider()}
+    ${small('No account needed — just tap the link above from any phone or computer. If you have photos on a USB stick or printed copies, you\u2019re welcome to bring them by in person too.')}
+  `);
+}
+
+// ── Template 6: Ready to publish — sent to funeral home staff/owner ───────
+
+export interface PublishPromptEmailParams {
+  memorialTitle: string;
+  ownerName?:    string;
+  previewUrl:    string;
+  videoUrl:      string;
+  pendingCount:  number;
+}
+
+export function renderPublishPromptEmail({
+  memorialTitle,
+  ownerName,
+  previewUrl,
+  videoUrl,
+  pendingCount,
+}: PublishPromptEmailParams): string {
+  memorialTitle = escapeHtml(memorialTitle);
+  ownerName     = ownerName ? escapeHtml(ownerName) : ownerName;
+  previewUrl    = escapeHtml(previewUrl);
+  videoUrl      = escapeHtml(videoUrl);
+
+  const pendingNote = pendingCount > 0
+    ? `There ${pendingCount === 1 ? 'is' : 'are'} still <strong>${pendingCount} item${pendingCount === 1 ? '' : 's'}</strong> waiting for your review before you publish.`
+    : 'Everything has been reviewed — it\u2019s ready to go.';
+
+  return base(`
+    ${h1(`${memorialTitle}'s service is tomorrow`)}
+    ${subheading('Time to review and publish')}
+    ${body(`${ownerName ? `Hi ${ownerName},` : 'Hello,'} the service for <strong>${memorialTitle}</strong> is scheduled for tomorrow. This is a good time to do a final check of the memorial before it goes live.`)}
+    ${body(pendingNote)}
+    ${cta(previewUrl, 'Preview & Publish →')}
+    ${divider()}
+    ${body('Once you\u2019re happy with it, you can also download the tribute video to play at the service.')}
+    ${cta(videoUrl, 'Open Tribute Video →')}
+    ${divider()}
+    ${small('This is an automated reminder based on the service date on file. No action is required if the memorial is already published.')}
   `);
 }

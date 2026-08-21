@@ -102,7 +102,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1.4rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   subtitle: {
@@ -112,7 +112,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'system-ui, sans-serif',
   },
   newBtn: {
-    background:    '#0a0a16',
+    background:    '#4f5d75',
     color:         '#f0ece4',
     borderRadius:  '7px',
     padding:       '0.55rem 1.1rem',
@@ -124,7 +124,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   importBtn: {
     background:    'transparent',
-    color:         '#0a0a16',
+    color:         '#4f5d75',
     border:        '1px solid rgba(10,10,22,0.18)',
     borderRadius:  '7px',
     padding:       '0.55rem 1.1rem',

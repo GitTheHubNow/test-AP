@@ -139,7 +139,7 @@ export function TeamSection() {
       <div style={styles.cardHeader}>
         <div style={styles.cardIconWrap}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="#c9a96e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            stroke="#cdba93" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -242,7 +242,7 @@ const styles: Record<string, React.CSSProperties> = {
   cardIconWrap: {
     width:          '40px',
     height:         '40px',
-    background:     '#0a0a16',
+    background:     '#4f5d75',
     borderRadius:   '8px',
     display:        'flex',
     alignItems:     'center',
@@ -253,7 +253,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1rem',
     fontWeight: 600,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
     lineHeight: 1.2,
   },
@@ -294,7 +294,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight:   600,
     fontFamily:   'system-ui, sans-serif',
     color:        '#fff',
-    background:   '#0a0a16',
+    background:   '#4f5d75',
     border:       'none',
     borderRadius: '8px',
     cursor:       'pointer',
@@ -351,7 +351,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   inviteEmail: {
     fontSize:   '0.86rem',
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   inviteRole: {

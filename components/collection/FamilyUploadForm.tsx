@@ -70,7 +70,7 @@ export function FamilyUploadForm({ token }: Props) {
   const labelStyle: React.CSSProperties = {
     display: 'block', fontSize: '0.72rem', fontWeight: 600,
     letterSpacing: '0.08em', textTransform: 'uppercase',
-    color: '#8a8a9a', marginBottom: '0.35rem',
+    color: '#98a2b3', marginBottom: '0.35rem',
     fontFamily: 'Georgia, serif',
   };
 
@@ -110,7 +110,7 @@ export function FamilyUploadForm({ token }: Props) {
                 fontFamily: 'Georgia, serif', cursor: 'pointer',
                 border: `1.5px solid ${type === opt.value ? '#1a1714' : '#ede8e0'}`,
                 background: type === opt.value ? '#1a1714' : '#faf8f5',
-                color:      type === opt.value ? '#f5f0e8' : '#8a8a9a',
+                color:      type === opt.value ? '#f4f1ea' : '#98a2b3',
                 transition: 'all 0.1s',
               }}
             >
@@ -152,7 +152,7 @@ export function FamilyUploadForm({ token }: Props) {
                 style={{ ...inputStyle, padding: '0.45rem 0.9rem' }}
               />
               {file && (
-                <p style={{ fontSize: '0.75rem', color: '#8a8a9a', marginTop: '0.3rem', fontFamily: 'Georgia, serif' }}>
+                <p style={{ fontSize: '0.75rem', color: '#98a2b3', marginTop: '0.3rem', fontFamily: 'Georgia, serif' }}>
                   {file.name} — {fmtBytes(file.size)}
                 </p>
               )}
@@ -171,7 +171,7 @@ export function FamilyUploadForm({ token }: Props) {
             style={{
               padding: '0.85rem', borderRadius: 8, fontSize: '0.9rem', fontWeight: 600,
               fontFamily: 'Georgia, serif', cursor: uploading ? 'not-allowed' : 'pointer',
-              background: uploading ? '#c4bdb5' : '#1a1714', color: '#f5f0e8',
+              background: uploading ? '#c4bdb5' : '#1a1714', color: '#f4f1ea',
               border: 'none', transition: 'background 0.15s',
             }}
           >

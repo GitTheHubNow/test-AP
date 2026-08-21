@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 // ── ADDED: SaaS launch imports ───────────────────────────────────────────────
-import { getOrgIdForUser }                                    from '@/lib/tenant';
-import { checkEntitlement, incrementUsage, entitlementError } from '@/lib/entitlement';
+import { getOrgIdForUser }  from '@/lib/tenant';
+import { incrementUsage }   from '@/lib/entitlement';
 // ────────────────────────────────────────────────────────────────────────────
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
@@ -16,19 +16,21 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const video = await prisma.tributeVideo.findUnique({
-    where: { memorialId: params.memorialId },
+    where: { memorialId: memorialId },
   });
 
   return NextResponse.json({ success: true, data: { video } });
@@ -48,13 +50,15 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -92,27 +96,29 @@ export async function POST(
     // Check if this memorial already has a completed video — re-renders are free,
     // only the first render on a fresh video counts against the monthly limit.
     const existing = await prisma.tributeVideo.findUnique({
-      where:  { memorialId: params.memorialId },
+      where:  { memorialId: memorialId },
       select: { status: true },
     });
 
     const isFirstRender = !existing || existing.status === 'DRAFT';
 
     if (isFirstRender) {
+      // CHANGED — was a checkEntitlement(orgId, 'videosPerMonth') cap
+      // check here. Videos aren't part of the base+metered billing
+      // model (only memorials are billed, at $199 each — see
+      // lib/stripe.ts header comment) and plan-tier video limits no
+      // longer exist. Still tracking the count for dashboard display
+      // (see app/dashboard/billing/page.tsx), just not blocking on it.
       const orgId = await getOrgIdForUser(userId);
-      const check = await checkEntitlement(orgId, 'videosPerMonth');
-      if (!check.allowed) return entitlementError(check.reason!);
-
-      // Increment after successful upsert — done below
       orgIdForIncrement = orgId;
     }
   }
   // ────────────────────────────────────────────────────────────────────────
 
   const video = await prisma.tributeVideo.upsert({
-    where:  { memorialId: params.memorialId },
+    where:  { memorialId: memorialId },
     create: {
-      memorialId:     params.memorialId,
+      memorialId:     memorialId,
       theme:          (body.theme as any)       ?? 'CLASSIC',
       musicTrackId:   body.musicTrackId         ?? null,
       photoOrder:     body.photoOrder           ?? [],

@@ -94,10 +94,10 @@ export function CaseList({ initialCases }: Props) {
             onClick={() => handleFilter(opt.value)}
             style={{
               ...s.filterBtn,
-              background:  statusFilter === opt.value ? '#0a0a16' : '#fff',
+              background:  statusFilter === opt.value ? '#4f5d75' : '#fff',
               color:       statusFilter === opt.value ? '#f0ece4' : 'rgba(10,10,22,0.55)',
               border:      statusFilter === opt.value
-                ? '1px solid #0a0a16'
+                ? '1px solid #4f5d75'
                 : '1px solid rgba(10,10,22,0.15)',
             }}
           >
@@ -209,7 +209,7 @@ const s: Record<string, React.CSSProperties> = {
     fontFamily: 'system-ui, sans-serif',
   },
   emptyLink: {
-    color:          '#c9a96e',
+    color:          '#cdba93',
     fontSize:       '0.85rem',
     fontFamily:     'system-ui, sans-serif',
     fontWeight:     600,
@@ -246,7 +246,7 @@ const s: Record<string, React.CSSProperties> = {
   name: {
     fontSize:   '0.95rem',
     fontWeight: 600,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   ref: {

@@ -119,7 +119,7 @@ function PreviewMemoryCard({ memory, primaryColor }: { memory: Memory; primaryCo
           </p>
         </div>
         {memory.featured && (
-          <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 600, color: '#c9a96e', background: '#fef3c7', padding: '0.15rem 0.55rem', borderRadius: 999 }}>
+          <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 600, color: '#cdba93', background: '#fef3c7', padding: '0.15rem 0.55rem', borderRadius: 999 }}>
             Featured
           </span>
         )}
@@ -176,18 +176,18 @@ export function PreviewWorkspace({
       {/* ── Sticky preview banner ── */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: '#1a1a2e', borderBottom: '2px solid #c9a96e',
+        background: '#4f5d75', borderBottom: '2px solid #cdba93',
         padding: '0.65rem 1.5rem',
         display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
           <span style={{
             fontSize: '0.62rem', letterSpacing: '0.2em', fontWeight: 700,
-            color: '#c9a96e', fontFamily: 'var(--font-body)', textTransform: 'uppercase',
+            color: '#cdba93', fontFamily: 'var(--font-body)', textTransform: 'uppercase',
           }}>
             {isLive ? '🟢 Live' : '👁 Preview Mode'}
           </span>
-          <span style={{ fontSize: '0.78rem', color: '#8a8a9a', fontFamily: 'var(--font-body)' }}>
+          <span style={{ fontSize: '0.78rem', color: '#98a2b3', fontFamily: 'var(--font-body)' }}>
             {isLive ? 'This memorial is now public.' : 'Not visible to the public yet.'}
           </span>
         </div>
@@ -197,7 +197,7 @@ export function PreviewWorkspace({
             onClick={() => setShowChecklist(s => !s)}
             style={{
               fontSize: '0.75rem', padding: '0.35rem 0.85rem', borderRadius: 6,
-              border: '1px solid #8a8a9a', background: 'transparent', color: '#f5f0e8',
+              border: '1px solid #98a2b3', background: 'transparent', color: '#f4f1ea',
               cursor: 'pointer', fontFamily: 'var(--font-body)',
             }}
           >
@@ -208,7 +208,7 @@ export function PreviewWorkspace({
             href={`/dashboard/memorial/${memorial.id}/collection`}
             style={{
               fontSize: '0.75rem', padding: '0.35rem 0.85rem', borderRadius: 6,
-              border: '1px solid #8a8a9a', background: 'transparent', color: '#f5f0e8',
+              border: '1px solid #98a2b3', background: 'transparent', color: '#f4f1ea',
               textDecoration: 'none', fontFamily: 'var(--font-body)',
             }}
           >
@@ -222,7 +222,7 @@ export function PreviewWorkspace({
               style={{
                 fontSize: '0.78rem', padding: '0.4rem 1.1rem', borderRadius: 6,
                 border: 'none', cursor: canPublish ? 'pointer' : 'not-allowed',
-                background: canPublish ? '#c9a96e' : '#4a4a5a', color: '#1a1a2e',
+                background: canPublish ? '#cdba93' : '#4a4a5a', color: '#4f5d75',
                 fontWeight: 700, fontFamily: 'var(--font-body)',
                 opacity: publishing ? 0.7 : 1,
               }}
@@ -236,7 +236,7 @@ export function PreviewWorkspace({
               href={`/dashboard/memorial/${memorial.id}/settings`}
               style={{
                 fontSize: '0.75rem', padding: '0.35rem 0.85rem', borderRadius: 6,
-                border: '1px solid #c9a96e', background: 'transparent', color: '#c9a96e',
+                border: '1px solid #cdba93', background: 'transparent', color: '#cdba93',
                 textDecoration: 'none', fontFamily: 'var(--font-body)',
               }}
             >
@@ -269,7 +269,7 @@ export function PreviewWorkspace({
               <div style={{
                 height: '100%', borderRadius: 999,
                 width: `${(checklistPassed / checklistTotal) * 100}%`,
-                background: checklistPassed === checklistTotal ? '#065F46' : '#c9a96e',
+                background: checklistPassed === checklistTotal ? '#065F46' : '#cdba93',
                 transition: 'width 0.3s',
               }} />
             </div>

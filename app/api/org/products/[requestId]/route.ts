@@ -21,9 +21,11 @@ import {
 } from '@/lib/products/transitions';
 import { handleAuthError } from '@/lib/errors';
 
-type Params = { params: { requestId: string } };
+type Params = { params: Promise<{ requestId: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const { requestId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -39,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // Fetch the request and verify it belongs to this org
     const existing = await prisma.productRequest.findFirst({
-      where: { id: params.requestId, organisationId: orgId },
+      where: { id: requestId, organisationId: orgId },
       select: { id: true, status: true },
     });
     if (!existing) {
@@ -101,7 +103,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const updated = await prisma.productRequest.update({
-      where: { id: params.requestId },
+      where: { id: requestId },
       data:  updateData,
     });
 

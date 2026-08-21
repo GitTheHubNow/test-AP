@@ -35,13 +35,17 @@ import { notFound } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import LifecyclePanel from '@/components/qr/LifecyclePanel';
 import { ensurePublicToken } from '@/lib/qr';
+import { MemorialJourney } from '@/components/journey/MemorialJourney';
+import type { QRState } from '@/types/v2';
 
-export default async function QRPage({ params }: { params: { memorialId: string } }) {
+export default async function QRPage({ params }: { params: Promise<{ memorialId: string }> }) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) notFound();
 
   const memorial = await prisma.memorial.findFirst({
-    where: { id: params.memorialId, ownerId: userId },
+    where: { id: memorialId, ownerId: userId },
     select: {
       id: true,
       firstName: true,
@@ -51,9 +55,19 @@ export default async function QRPage({ params }: { params: { memorialId: string 
       uploadLinkEnabled: true,
       // Phase 2: lifecycle QR token (Phase 17 field, nullable)
       publicToken: true,
+      // Memorial Journey tracker — same fields the lifecycle panel and
+      // handover workspace already read, just surfaced together here.
+      qrState: true,
+      serviceStartAt: true,
+      unlockAt: true,
+      workflowStage: true,
     },
   });
   if (!memorial) notFound();
+
+  const pendingCount = await prisma.memory.count({
+    where: { memorialId: memorial.id, status: 'PENDING' },
+  });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const name = [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') || 'Memorial';
@@ -80,9 +94,16 @@ export default async function QRPage({ params }: { params: { memorialId: string 
     QRCode.toDataURL(urls.lifecycle, { margin: 1, width: 300, color: { dark: '#1a0e05', light: '#fffdf7' } }),
   ]);
 
-  return (
-    <>
-      <style>{`
+  // Raw <style> content with single-quoted CSS values (e.g. font-family:
+  // 'Lato') gets HTML-entity-encoded during SSR (' becomes &#x27;) but not
+  // during client-side re-render, so React sees the two as different text
+  // and throws a hydration mismatch even though the rendered CSS is
+  // identical either way. Building the string as a plain variable and
+  // injecting it via dangerouslySetInnerHTML (the documented approach for
+  // raw <style> tags in Next.js) sidesteps React's text-node diffing for
+  // this block entirely, since the browser parses it as raw HTML on both
+  // passes rather than as a React child that gets entity-escaped once.
+  const qrPageStyles = `
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400&display=swap');
 
         * { box-sizing: border-box; }
@@ -139,10 +160,10 @@ export default async function QRPage({ params }: { params: { memorialId: string 
           content: '';
           flex: 1;
           height: 1px;
-          background: linear-gradient(to right, transparent, #c9a96e);
+          background: linear-gradient(to right, transparent, #cdba93);
         }
-        .divider::after { background: linear-gradient(to left, transparent, #c9a96e); }
-        .divider span { font-size: 0.6rem; color: #c9a96e; letter-spacing: 0.25em; text-transform: uppercase; }
+        .divider::after { background: linear-gradient(to left, transparent, #cdba93); }
+        .divider span { font-size: 0.6rem; color: #cdba93; letter-spacing: 0.25em; text-transform: uppercase; }
 
         .qr-grid {
           display: grid;
@@ -167,7 +188,7 @@ export default async function QRPage({ params }: { params: { memorialId: string 
           position: absolute;
           top: 0; left: 0; right: 0;
           height: 3px;
-          background: linear-gradient(90deg, #c9a96e, #e8c87e, #c9a96e);
+          background: linear-gradient(90deg, #cdba93, #e8c87e, #cdba93);
         }
 
         .qr-card.permanent::before {
@@ -246,8 +267,8 @@ export default async function QRPage({ params }: { params: { memorialId: string 
           font-size: 1rem;
           padding: 0.75rem 2rem;
           border-radius: 6px;
-          border: 1px solid #c9a96e;
-          background: linear-gradient(135deg, #c9a96e, #e8c87e);
+          border: 1px solid #cdba93;
+          background: linear-gradient(135deg, #cdba93, #e8c87e);
           color: #1a0e05;
           cursor: pointer;
           font-weight: 600;
@@ -286,14 +307,28 @@ export default async function QRPage({ params }: { params: { memorialId: string 
           .qr-card::before { display: none; }
           body { background: white; }
         }
-      `}</style>
+      `;
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: qrPageStyles }} />
 
       <div className="qr-page">
         <div className="qr-header">
-          <p className="eyebrow">Memoriam · QR Codes</p>
+          <p className="eyebrow">Absolute Posterity · QR Codes</p>
           <h1>{name}</h1>
           <p className="subline">Scan or print these codes for use at the service</p>
         </div>
+
+        <MemorialJourney
+          memorialId={memorial.id}
+          qrGenerated={Boolean(publicToken)}
+          qrState={memorial.qrState as QRState}
+          serviceStartAt={memorial.serviceStartAt}
+          unlockAt={memorial.unlockAt}
+          pendingCount={pendingCount}
+          workflowStage={memorial.workflowStage}
+        />
 
         <div className="divider"><span>codes</span></div>
 

@@ -23,11 +23,13 @@ import { getOrgIdForUser }     from '@/lib/tenant';
 import Link                    from 'next/link';
 import { PrefilledMemorialForm, type CasePrefill } from '@/components/memorial/PrefilledMemorialForm';
 
-interface Props { params: { caseId: string } }
+interface Props { params: Promise<{ caseId: string }> }
 
 export const dynamic = 'force-dynamic';
 
 export default async function CreateMemorialFromCasePage({ params }: Props) {
+  const { caseId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -41,7 +43,7 @@ export default async function CreateMemorialFromCasePage({ params }: Props) {
   if (!org?.featureCaseLite) redirect('/dashboard/cases');
 
   const funeralCase = await prisma.funeralCase.findFirst({
-    where: { id: params.caseId, organisationId: orgId },
+    where: { id: caseId, organisationId: orgId },
     select: {
       id:            true,
       caseRef:       true,
@@ -60,12 +62,12 @@ export default async function CreateMemorialFromCasePage({ params }: Props) {
 
   // Already has a memorial — send them back to the case
   if (funeralCase.memorialId) {
-    redirect(`/dashboard/cases/${params.caseId}`);
+    redirect(`/dashboard/cases/${caseId}`);
   }
 
   // Cancelled cases shouldn't create new memorials
   if (funeralCase.status === 'CANCELLED') {
-    redirect(`/dashboard/cases/${params.caseId}`);
+    redirect(`/dashboard/cases/${caseId}`);
   }
 
   const prefill: CasePrefill = {
@@ -86,7 +88,7 @@ export default async function CreateMemorialFromCasePage({ params }: Props) {
         <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
           <Link href="/dashboard/cases" className="hover:text-gray-700">Cases</Link>
           <span>›</span>
-          <Link href={`/dashboard/cases/${params.caseId}`} className="hover:text-gray-700">
+          <Link href={`/dashboard/cases/${caseId}`} className="hover:text-gray-700">
             {funeralCase.deceasedName}
           </Link>
           <span>›</span>

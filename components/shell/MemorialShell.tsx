@@ -4,7 +4,7 @@
 // Used by app/v/[publicToken]/page.tsx.
 //
 // When isWhiteLabelEnabled = false (all current funeral homes):
-//   renders Memoriam defaults — dark navy background, gold accent.
+//   renders Absolute Posterity defaults — dark navy background, gold accent.
 //   Matches V1 memorial page aesthetic exactly.
 //
 // When isWhiteLabelEnabled = true (future):
@@ -25,7 +25,7 @@ export function MemorialShell({ theme, children }: Props) {
       style={{
         minHeight:  '100vh',
         background: theme.secondaryColor,
-        color:      '#f5f0e8',
+        color:      '#f4f1ea',
         fontFamily: 'Georgia, serif',
       }}
     >
@@ -80,13 +80,13 @@ function ShellHeader({ theme }: { theme: ResolvedTheme }) {
               opacity:       0.7,
             }}
           >
-            {theme.isWhiteLabel ? 'Memorial Service' : 'Memoriam'}
+            {theme.isWhiteLabel ? 'Memorial Service' : 'Absolute Posterity'}
           </span>
           <span
             style={{
               fontSize:      '1.05rem',
               fontWeight:    300,
-              color:         '#f5f0e8',
+              color:         '#f4f1ea',
               letterSpacing: '0.04em',
             }}
           >
@@ -122,7 +122,7 @@ function ShellFooter({ theme }: { theme: ResolvedTheme }) {
           style={{
             margin:        0,
             fontSize:      '0.72rem',
-            color:         '#3a3a5a',
+            color:         '#6b7890',
             letterSpacing: '0.03em',
             fontFamily:    'Arial, sans-serif',
           }}
@@ -147,7 +147,7 @@ function ShellFooter({ theme }: { theme: ResolvedTheme }) {
             fontFamily:    'Arial, sans-serif',
           }}
         >
-          Powered by Memoriam
+          Powered by Absolute Posterity
         </p>
       )}
     </footer>

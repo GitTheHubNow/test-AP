@@ -96,7 +96,7 @@ export function SlideshowPageClient({ memorialId, memorialName }: Props) {
 const shell: React.CSSProperties = {
   position:        'fixed',
   inset:           0,
-  background:      '#0a0a16',
+  background:      '#4f5d75',
   display:         'flex',
   alignItems:      'center',
   justifyContent:  'center',
@@ -112,7 +112,7 @@ const spinner: React.CSSProperties = {
   width:         '40px',
   height:        '40px',
   border:        '3px solid rgba(201,169,110,0.2)',
-  borderTop:     '3px solid #c9a96e',
+  borderTop:     '3px solid #cdba93',
   borderRadius:  '50%',
   animation:     'spin 0.9s linear infinite',
   margin:        '0 auto 1.5rem',
@@ -143,7 +143,7 @@ const errorBody: React.CSSProperties = {
 };
 
 const backLink: React.CSSProperties = {
-  color:          '#c9a96e',
+  color:          '#cdba93',
   fontSize:       '0.85rem',
   textDecoration: 'none',
   letterSpacing:  '0.04em',

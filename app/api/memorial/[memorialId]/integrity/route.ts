@@ -6,8 +6,10 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
 
   if (!userId) {
@@ -19,12 +21,12 @@ export async function GET(
 
   // FIXED: previously a manual ownerId check that blocked org staff.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
 
-  const integrityCheck = await verifyMemorialIntegrity(params.memorialId);
+  const integrityCheck = await verifyMemorialIntegrity(memorialId);
 
   return NextResponse.json({
     valid: integrityCheck.valid,

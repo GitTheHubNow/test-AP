@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const upstream = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Memoriam/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Absolute Posterity/1.0)' },
     });
 
     const contentType = upstream.headers.get('Content-Type') ?? '';
@@ -78,7 +78,14 @@ export async function GET(req: NextRequest) {
       headers: {
         'Content-Type': contentType || 'audio/mpeg',
         'Cross-Origin-Resource-Policy': 'cross-origin',
-        'Access-Control-Allow-Origin': '*',
+        // Was '*' — meant any site on the internet could fetch through
+        // this authenticated proxy via client-side JS the moment
+        // ALLOWED_HOSTS above gets a real entry (currently empty, so
+        // this was dead but latent). This route is auth-gated and only
+        // ever consumed by this app's own audio player, same-origin —
+        // there's no legitimate reason a third-party site needs to call
+        // it. Scoped to the app's own origin instead.
+        'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL ?? 'null',
         'Cache-Control': 'public, max-age=86400',
       },
     });

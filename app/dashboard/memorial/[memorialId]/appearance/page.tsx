@@ -7,12 +7,14 @@ import { getPublicUrl } from '@/lib/upload-shared';
 import { ensurePublicToken } from '@/lib/qr';
 import { AppearanceEditor } from '@/components/memorial/AppearanceEditor';
 
-export default async function AppearancePage({ params }: { params: { memorialId: string } }) {
+export default async function AppearancePage({ params }: { params: Promise<{ memorialId: string }> }) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) notFound();
 
   const memorial = await prisma.memorial.findFirst({
-    where: { id: params.memorialId, ownerId: userId },
+    where: { id: memorialId, ownerId: userId },
     select: {
       id:           true,
       firstName:    true,
@@ -45,8 +47,8 @@ export default async function AppearancePage({ params }: { params: { memorialId:
 
   // publicToken is generated lazily (see app/api/memorials/[id]/qr/route.ts) —
   // generate it here too so "View live" is never a dead link from this editor.
-  const publicToken = await ensurePublicToken(params.memorialId, memorial.publicToken);
-  const publicHref = `/v/${memorial.slug ?? params.memorialId}?key=${publicToken}`;
+  const publicToken = await ensurePublicToken(memorialId, memorial.publicToken);
+  const publicHref = `/v/${memorial.slug ?? memorialId}?key=${publicToken}`;
 
   const heroUrl = memorial.heroImageKey
     ? getPublicUrl(memorial.heroImageKey)

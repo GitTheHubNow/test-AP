@@ -37,8 +37,10 @@ interface BatchOperation {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
 
   if (!userId) {
@@ -49,7 +51,7 @@ export async function POST(
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -91,18 +93,25 @@ export async function POST(
       const processed: string[] = [];
       const failed: string[] = [];
 
+      // Single findMany up front instead of one findUnique per item —
+      // was doing a separate round-trip per memoryId just to check
+      // memorialId/status, on top of the update + auditEvent.create
+      // that also happen per item. For a 50-item batch that's up to
+      // 150 sequential round-trips; this cuts it to roughly 51
+      // (1 lookup + up to 50 update/audit pairs, which have to stay
+      // per-row since each write needs its own audit log entry and
+      // its own pass/fail outcome for the response).
+      const foundMemories = await tx.memory.findMany({
+        where: { id: { in: body.memoryIds } },
+        select: { id: true, memorialId: true, status: true },
+      });
+      const memoryById = new Map(foundMemories.map(m => [m.id, m]));
+
       for (const memoryId of body.memoryIds) {
         try {
-          const memory = await tx.memory.findUnique({
-            where: { id: memoryId },
-            select: { 
-              id: true, 
-              memorialId: true, 
-              status: true 
-            },
-          });
+          const memory = memoryById.get(memoryId);
 
-          if (!memory || memory.memorialId !== params.memorialId) {
+          if (!memory || memory.memorialId !== memorialId) {
             failed.push(memoryId);
             continue;
           }

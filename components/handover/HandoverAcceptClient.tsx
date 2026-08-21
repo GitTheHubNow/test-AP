@@ -46,7 +46,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
         <h2 style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', fontSize: '1.6rem', fontWeight: 400, color: '#1a1714', textAlign: 'center', marginBottom: '0.75rem' }}>
           Ownership Transferred
         </h2>
-        <p style={{ fontSize: '0.9rem', color: '#8a8a9a', fontFamily: 'Georgia, serif', lineHeight: 1.7, textAlign: 'center', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '0.9rem', color: '#98a2b3', fontFamily: 'Georgia, serif', lineHeight: 1.7, textAlign: 'center', marginBottom: '1.5rem' }}>
           You now have full ownership of <strong style={{ color: '#1a1714' }}>{memorial.title}</strong>.
           You can manage it from your dashboard.
         </p>
@@ -54,7 +54,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
           onClick={() => router.push('/dashboard/memorials')}
           style={{
             width: '100%', padding: '0.85rem', borderRadius: 8,
-            background: '#1a1a2e', color: '#f5f0e8', border: 'none',
+            background: '#4f5d75', color: '#f4f1ea', border: 'none',
             fontSize: '0.9rem', fontWeight: 600, fontFamily: 'Georgia, serif',
             cursor: 'pointer',
           }}
@@ -70,7 +70,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
       <h1 style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', fontSize: 'clamp(1.75rem, 4vw, 2.5rem)', fontWeight: 400, color: '#1a1714', marginBottom: '0.5rem' }}>
         Accept Memorial Ownership
       </h1>
-      <p style={{ fontSize: '0.9rem', color: '#8a8a9a', fontFamily: 'Georgia, serif', lineHeight: 1.7, marginBottom: '2rem' }}>
+      <p style={{ fontSize: '0.9rem', color: '#98a2b3', fontFamily: 'Georgia, serif', lineHeight: 1.7, marginBottom: '2rem' }}>
         {familyContactName ? `Hello, ${familyContactName}. A` : 'A'} funeral home has transferred ownership of{' '}
         <strong style={{ color: '#1a1714' }}>{memorial.title}</strong> to you.
         Once you accept, you will have full control of this memorial.
@@ -86,7 +86,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
           <SignInButton mode="modal" forceRedirectUrl={`/handover/accept/${token}`}>
             <button style={{
               width: '100%', padding: '0.85rem', borderRadius: 8,
-              background: '#1a1a2e', color: '#f5f0e8', border: 'none',
+              background: '#4f5d75', color: '#f4f1ea', border: 'none',
               fontSize: '0.9rem', fontWeight: 600, fontFamily: 'Georgia, serif',
               cursor: 'pointer',
             }}>
@@ -116,7 +116,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
             disabled={accepting}
             style={{
               width: '100%', padding: '0.85rem', borderRadius: 8,
-              background: accepting ? '#c4bdb5' : '#1a1a2e', color: '#f5f0e8', border: 'none',
+              background: accepting ? '#c4bdb5' : '#4f5d75', color: '#f4f1ea', border: 'none',
               fontSize: '0.9rem', fontWeight: 600, fontFamily: 'Georgia, serif',
               cursor: accepting ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
             }}

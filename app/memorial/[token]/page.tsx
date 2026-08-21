@@ -4,9 +4,9 @@ import { getPublicMemorialByToken } from '@/lib/publicMemorial';
 import type { PublicMemorialData } from '@/lib/publicMemorial';
 
 interface MemorialPageProps {
-  params: {
+  params: Promise<{
     token: string;
-  };
+  }>;
 }
 
 /**
@@ -15,7 +15,8 @@ interface MemorialPageProps {
 export async function generateMetadata(
   { params }: MemorialPageProps
 ): Promise<Metadata> {
-  const data = await getPublicMemorialByToken(params.token);
+  const { token } = await params;
+  const data = await getPublicMemorialByToken(token);
 
   if (!data) {
     return {
@@ -33,7 +34,8 @@ export async function generateMetadata(
  * Read-only display of approved content.
  */
 export default async function MemorialPage({ params }: MemorialPageProps) {
-  const data = await getPublicMemorialByToken(params.token);
+  const { token } = await params;
+  const data = await getPublicMemorialByToken(token);
 
   if (!data) {
     notFound();

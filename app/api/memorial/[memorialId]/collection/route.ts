@@ -30,15 +30,17 @@ import { verifyFileContent } from '@/lib/file-validation';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -138,7 +140,7 @@ export async function POST(
 
   } else if (type !== 'STORY') {
     // Non-story items should have a file — warn but don't block (staff may add later)
-    console.warn(`[Collection] ${type} item created without a file — memorialId: ${params.memorialId}`);
+    console.warn(`[Collection] ${type} item created without a file — memorialId: ${memorialId}`);
   }
 
   // Create collection item + audit log
@@ -146,7 +148,7 @@ export async function POST(
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.collectionItem.create({
         data: {
-          memorialId:  params.memorialId,
+          memorialId:  memorialId,
           uploadedBy:  userId,
           uploaderRole: 'STAFF',
           type,
@@ -169,7 +171,7 @@ export async function POST(
           actorRole:  ActorRole.OWNER,
           reasonCode: ReasonCode.CREATION,
           metadata: {
-            memorialId: params.memorialId,
+            memorialId: memorialId,
             type,
             hasFile: !!blobKey,
             sizeBytes,
@@ -216,15 +218,17 @@ export async function POST(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -235,7 +239,7 @@ export async function GET(
 
   const items = await prisma.collectionItem.findMany({
     where: {
-      memorialId: params.memorialId,
+      memorialId: memorialId,
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(typeFilter   ? { type:   typeFilter   } : {}),
     },

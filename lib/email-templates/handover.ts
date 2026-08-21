@@ -7,6 +7,8 @@
 //
 // Style: matches automation-emails.ts (Georgia serif, warm cream palette).
 
+import { escapeHtml } from '@/lib/htmlEscape';
+
 const base = (content: string) => `
 <!DOCTYPE html>
 <html>
@@ -19,7 +21,7 @@ const base = (content: string) => `
     <tr>
       <td align="center">
         <table width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,0.07);">
-          <tr><td style="height:4px;background:#c9a96e;"></td></tr>
+          <tr><td style="height:4px;background:#cdba93;"></td></tr>
           <tr>
             <td style="padding:40px 44px 36px;">
               ${content}
@@ -28,7 +30,7 @@ const base = (content: string) => `
           <tr>
             <td style="padding:20px 44px 28px;border-top:1px solid #f0ece6;">
               <p style="margin:0;font-size:11px;color:#b0a898;text-align:center;letter-spacing:0.08em;text-transform:uppercase;">
-                Memoriam &middot; Memorial Platform
+                Absolute Posterity &middot; Memorial Platform
               </p>
             </td>
           </tr>
@@ -52,7 +54,7 @@ const body = (t: string) =>
 const cta = (href: string, label: string) => `
   <table cellpadding="0" cellspacing="0" style="margin:28px 0;">
     <tr>
-      <td style="background:#c9a96e;border-radius:8px;">
+      <td style="background:#cdba93;border-radius:8px;">
         <a href="${href}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;font-family:Georgia,serif;letter-spacing:0.02em;">
           ${label}
         </a>
@@ -84,6 +86,15 @@ export function renderHandoverInitiatedEmail({
   acceptUrl,
   expiresAt,
 }: HandoverInitiatedEmailParams): string {
+  // Escape free-text values before interpolation — see lib/htmlEscape.ts.
+  // familyContactName in particular now also comes from
+  // Memorial.nominatedName (auto-handover — lib/jobs/job-auto-handover.ts),
+  // a free-text field with no format validation.
+  memorialTitle     = escapeHtml(memorialTitle);
+  familyContactName = escapeHtml(familyContactName);
+  funeralHomeName   = escapeHtml(funeralHomeName);
+  acceptUrl         = escapeHtml(acceptUrl);
+
   const expiry = expiresAt.toLocaleDateString('en-AU', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -119,6 +130,11 @@ export function renderHandoverAcceptedFHEmail({
   acceptedAt,
   dashboardUrl,
 }: HandoverAcceptedFHEmailParams): string {
+  memorialTitle     = escapeHtml(memorialTitle);
+  familyContactName = escapeHtml(familyContactName);
+  familyEmail       = escapeHtml(familyEmail);
+  dashboardUrl      = escapeHtml(dashboardUrl);
+
   const when = acceptedAt.toLocaleDateString('en-AU', {
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -160,6 +176,11 @@ export function renderHandoverAcceptedFamEmail({
   memorialUrl,
   dashboardUrl,
 }: HandoverAcceptedFamEmailParams): string {
+  memorialTitle     = escapeHtml(memorialTitle);
+  familyContactName = escapeHtml(familyContactName);
+  memorialUrl       = escapeHtml(memorialUrl);
+  dashboardUrl      = escapeHtml(dashboardUrl);
+
   return base(`
     ${h1(`You now own this memorial`)}
     ${sub(`In memory of ${memorialTitle}`)}
@@ -168,7 +189,7 @@ export function renderHandoverAcceptedFamEmail({
     ${body(`You can manage photos, approve memories from friends and family, and update the page at any time from your dashboard.`)}
     <table cellpadding="0" cellspacing="0" style="margin:28px 0;">
       <tr>
-        <td style="background:#c9a96e;border-radius:8px;margin-right:8px;">
+        <td style="background:#cdba93;border-radius:8px;margin-right:8px;">
           <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;font-family:Georgia,serif;">
             Go to Dashboard →
           </a>

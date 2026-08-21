@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                     from '@/lib/prisma';
-import { stripe, getPlanFromPriceId } from '@/lib/stripe';
+import { stripe }                     from '@/lib/stripe';
 import type Stripe                    from 'stripe';
 
 // Stripe requires the raw body for signature verification.
@@ -177,8 +177,13 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function applySubscriptionToOrg(orgId: string, sub: Stripe.Subscription) {
-  const priceId  = sub.items.data[0]?.price.id;
-  const plan     = priceId ? getPlanFromPriceId(priceId) : null;
+  // CHANGED — subscriptions now have TWO items: the flat base fee and
+  // the metered per-memorial price. Previously this took
+  // sub.items.data[0] unconditionally, which worked when there was only
+  // ever one item, but would silently grab whichever item Stripe
+  // happened to return first once a second item existed — not
+  // necessarily the base fee. Find it explicitly instead.
+  const baseItem = sub.items.data.find((item) => item.price.id === process.env.STRIPE_BASE_PRICE_ID);
 
   const statusMap: Record<Stripe.Subscription.Status, string> = {
     active:             'ACTIVE',
@@ -194,13 +199,21 @@ async function applySubscriptionToOrg(orgId: string, sub: Stripe.Subscription) {
   await prisma.organisation.update({
     where: { id: orgId },
     data: {
-      ...(plan ? { plan } : {}),
+      // plan field intentionally left untouched — OrgPlan tiers are no
+      // longer meaningful (see lib/stripe.ts header comment), every org
+      // stays on its @default. Not writing to it here at all, rather
+      // than writing a value that would be misleading.
       stripeSubId:        sub.id,
-      stripePriceId:      priceId ?? null,
+      stripePriceId:      baseItem?.price.id ?? null,
       subscriptionStatus: (statusMap[sub.status] ?? 'NONE') as any,
-      // Stripe v20: current_period_end moved from Subscription → SubscriptionItem
-      currentPeriodEnd:   sub.items.data[0]?.current_period_end
-                            ? new Date(sub.items.data[0].current_period_end * 1000)
+      // Stripe v20: current_period_end moved from Subscription → SubscriptionItem.
+      // Read off the base item specifically — the metered item's
+      // current_period_end should be identical (both items belong to
+      // the same subscription/billing cycle) but base is the
+      // semantically correct one to reference for "when does this
+      // subscription's period end".
+      currentPeriodEnd:   baseItem?.current_period_end
+                            ? new Date(baseItem.current_period_end * 1000)
                             : null,
       cancelAtPeriodEnd:  sub.cancel_at_period_end,
       trialEndsAt:        sub.trial_end ? new Date(sub.trial_end * 1000) : null,

@@ -31,6 +31,7 @@
 import { NextRequest } from 'next/server';
 import { JobExecutor, JobType } from '@/lib/jobs';
 import { logInfo, logError } from '@/lib/errors';
+import { isValidCronSecret } from '@/lib/timingSafe';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -45,7 +46,9 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: 'Cron not configured' }, { status: 500 });
   }
 
-  if (provided !== process.env.CRON_SECRET) {
+  // Constant-time comparison (see lib/cronAuth.ts) — was a plain !==
+  // string comparison, a low-severity timing side channel.
+  if (!isValidCronSecret(provided)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

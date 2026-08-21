@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { getPublicUrl } from '@/lib/upload-shared';
 
@@ -93,6 +93,31 @@ function fmtRelative(iso: string): string {
   return `${days}d ago`;
 }
 
+// ── Relative Time (hydration-safe) ──────────────────────────────────────────
+//
+// fmtRelative() depends on Date.now() at render time, which differs
+// between the server render and the client hydration pass by however
+// long the request took — normally milliseconds, but if that gap
+// straddles a minute/hour boundary, the server and client text won't
+// match and React throws a hydration error (same underlying class of
+// bug as the QR page / AppearanceEditor <style> fix, just a different
+// trigger). Rendering the stable absolute date on first paint (which
+// matches on both server and client) and swapping to the relative text
+// only after mount sidesteps the mismatch entirely — the tradeoff is a
+// brief flash of the absolute date before it switches, which is the
+// standard, documented way to handle this in React.
+function RelativeTime({ iso }: { iso: string }) {
+  const [text, setText] = useState<string>(() =>
+    new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+  );
+
+  useEffect(() => {
+    setText(fmtRelative(iso));
+  }, [iso]);
+
+  return <>{text}</>;
+}
+
 // ── Status Badge ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
@@ -179,7 +204,7 @@ function ItemCard({
               · {uploaderLabel}
             </span>
             <span style={{ fontSize: '0.7rem', color: 'var(--ash)', fontFamily: 'var(--font-body)', marginLeft: 'auto' }}>
-              {fmtRelative(item.createdAt)}
+              <RelativeTime iso={item.createdAt} />
             </span>
           </div>
 
@@ -339,7 +364,7 @@ function InviteRow({ invite, onRevoke, onCopy }: {
         </p>
         <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: 'var(--ash)', fontFamily: 'var(--font-body)' }}>
           {invite.uploadCount} upload{invite.uploadCount !== 1 ? 's' : ''} · expires {fmtDate(invite.expiresAt)}
-          {invite.usedAt && ` · first used ${fmtRelative(invite.usedAt)}`}
+          {invite.usedAt && <> · first used <RelativeTime iso={invite.usedAt} /></>}
         </p>
       </div>
       <span style={{ fontSize: '0.72rem', fontWeight: 600, color: statusColor, fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>

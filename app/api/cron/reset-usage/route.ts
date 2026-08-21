@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                     from '@/lib/prisma';
+import { isValidCronSecret }          from '@/lib/timingSafe';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -32,7 +33,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Cron not configured' }, { status: 500 });
   }
 
-  if (provided !== process.env.CRON_SECRET) {
+  // Constant-time comparison (see lib/cronAuth.ts) — was a plain !==
+  // string comparison, a low-severity timing side channel.
+  if (!isValidCronSecret(provided)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

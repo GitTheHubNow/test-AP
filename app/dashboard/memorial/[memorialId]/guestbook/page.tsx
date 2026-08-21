@@ -4,29 +4,51 @@ import { prisma } from '@/lib/prisma';
 import { GuestBookList } from '@/components/GuestBookList';
 import Link from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface GuestBookPageProps {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function GuestBookPage({ params }: GuestBookPageProps) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   // FIXED: previously a manual `ownerId !== userId` check, which blocked
   // every org staff member except the literal creator.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch {
     notFound();
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
-    select: { id: true, title: true },
+    where:  { id: memorialId },
+    select: {
+      id: true, title: true,
+      funeralDate: true, tributeUnlockOverride: true,
+    },
   });
 
   if (!memorial) notFound();
+
+  // Server-side enforcement of the same gate the sidebar reflects — see
+  // lib/memorial/journeyGate.ts. Guest Book unlocks together with Photos
+  // and Tribute Video, normally 5 days before the service.
+  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+    return (
+      <SectionLockedScreen
+        memorialId={memorial.id}
+        sectionName="Guest Book"
+        daysLeft={daysLeft}
+        hasFuneralDate={Boolean(memorial.funeralDate)}
+      />
+    );
+  }
 
   const entrySelect = {
     id: true, authorName: true, message: true, location: true,
@@ -35,13 +57,13 @@ export default async function GuestBookPage({ params }: GuestBookPageProps) {
 
   const [pendingEntries, approvedEntries] = await Promise.all([
     prisma.guestBookEntry.findMany({
-      where:   { memorialId: params.memorialId, status: 'PENDING' },
+      where:   { memorialId: memorialId, status: 'PENDING' },
       orderBy: { createdAt: 'desc' },
       take:    50,
       select:  entrySelect,
     }),
     prisma.guestBookEntry.findMany({
-      where:   { memorialId: params.memorialId, status: 'APPROVED' },
+      where:   { memorialId: memorialId, status: 'APPROVED' },
       orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
       take:    100,
       select:  entrySelect,
@@ -79,7 +101,7 @@ export default async function GuestBookPage({ params }: GuestBookPageProps) {
                 Pending
               </div>
             </div>
-            <Link href={`/dashboard/memorial/${params.memorialId}/settings`} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
+            <Link href={`/dashboard/memorial/${memorialId}/settings`} className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
               Settings →
             </Link>
           </div>
@@ -89,7 +111,7 @@ export default async function GuestBookPage({ params }: GuestBookPageProps) {
       <div className="page-body">
         <div className="card-elevated" style={{ padding: '2rem 2.5rem' }}>
           <GuestBookList
-            memorialId={params.memorialId}
+            memorialId={memorialId}
             pendingEntries={pendingEntries}
             approvedEntries={approvedEntries}
           />

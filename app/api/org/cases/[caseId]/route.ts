@@ -13,7 +13,7 @@ import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 import { getOrgIdForUser }            from '@/lib/tenant';
 
-type Params = { params: { caseId: string } };
+type Params = { params: Promise<{ caseId: string }> };
 
 const VALID_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
 
@@ -40,6 +40,8 @@ async function guardFeature(orgId: string): Promise<NextResponse | null> {
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const { caseId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -55,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (blocked) return blocked;
 
     const funeralCase = await prisma.funeralCase.findFirst({
-      where: { id: params.caseId, organisationId: orgId },
+      where: { id: caseId, organisationId: orgId },
       include: {
         memorial: {
           select: {
@@ -88,6 +90,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const { caseId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -102,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const blocked = await guardFeature(orgId);
     if (blocked) return blocked;
 
-    const existing = await resolveCase(params.caseId, orgId);
+    const existing = await resolveCase(caseId, orgId);
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
@@ -132,7 +136,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Check uniqueness only if the ref is changing
       if (ref !== existing.caseRef) {
         const conflict = await prisma.funeralCase.findFirst({
-          where: { organisationId: orgId, caseRef: ref, NOT: { id: params.caseId } },
+          where: { organisationId: orgId, caseRef: ref, NOT: { id: caseId } },
           select: { id: true },
         });
         if (conflict) {
@@ -190,7 +194,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
         // Check it isn't already linked to another case
         const alreadyLinked = await prisma.funeralCase.findFirst({
-          where: { memorialId: body.memorialId, NOT: { id: params.caseId } },
+          where: { memorialId: body.memorialId, NOT: { id: caseId } },
           select: { id: true, caseRef: true },
         });
         if (alreadyLinked) {
@@ -208,7 +212,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const updated = await prisma.funeralCase.update({
-      where: { id: params.caseId },
+      where: { id: caseId },
       data:  update,
       include: {
         memorial: {
@@ -231,6 +235,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // ── DELETE ────────────────────────────────────────────────────────────────────
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const { caseId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -245,7 +251,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const blocked = await guardFeature(orgId);
     if (blocked) return blocked;
 
-    const existing = await resolveCase(params.caseId, orgId);
+    const existing = await resolveCase(caseId, orgId);
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
@@ -258,7 +264,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       );
     }
 
-    await prisma.funeralCase.delete({ where: { id: params.caseId } });
+    await prisma.funeralCase.delete({ where: { id: caseId } });
 
     return NextResponse.json({ success: true, data: { deleted: true } });
 

@@ -37,10 +37,12 @@ import {
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
   const handover = await prisma.memorialHandover.findUnique({
-    where:  { acceptToken: params.token },
+    where:  { acceptToken: token },
     select: {
       id:                   true,
       status:               true,
@@ -101,8 +103,10 @@ export async function GET(
  */
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params;
+
   // Family MUST be signed in to accept
   const { userId } = await auth();
   if (!userId) {
@@ -110,7 +114,7 @@ export async function POST(
   }
 
   const handover = await prisma.memorialHandover.findUnique({
-    where:  { acceptToken: params.token },
+    where:  { acceptToken: token },
     select: {
       id:                   true,
       status:               true,

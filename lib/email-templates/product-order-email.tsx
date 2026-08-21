@@ -88,11 +88,11 @@ export function renderProductOrderEmail(props: ProductOrderEmailProps): string {
 
           <!-- Header -->
           <tr>
-            <td style="background-color: #0a0a16; padding: 24px 48px;">
+            <td style="background-color: #4f5d75; padding: 24px 48px;">
               <h1 style="color: #ffffff; font-size: 22px; font-weight: bold; margin: 0;">
                 New Order: ${escapeHtml(productLabel)}
               </h1>
-              <p style="color: #c9a96e; font-size: 13px; margin: 4px 0 0;">
+              <p style="color: #cdba93; font-size: 13px; margin: 4px 0 0;">
                 ${escapeHtml(props.organisationName)}${props.caseRef ? ` · Ref ${escapeHtml(props.caseRef)}` : ''}
               </p>
             </td>
@@ -155,7 +155,7 @@ export function renderProductOrderEmail(props: ProductOrderEmailProps): string {
           <!-- CTA -->
           <tr>
             <td style="padding: 32px 48px 40px;">
-              <a href="${props.requestUrl}" style="display: inline-block; background-color: #0a0a16; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: 600;">
+              <a href="${props.requestUrl}" style="display: inline-block; background-color: #4f5d75; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: 600;">
                 View in dashboard
               </a>
             </td>

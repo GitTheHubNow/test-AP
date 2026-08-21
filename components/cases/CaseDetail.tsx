@@ -440,7 +440,7 @@ function Row({ label, value, mono }: { label: string; value: string | null | und
       <dt style={{ minWidth: '120px', fontSize: '0.78rem', color: 'rgba(10,10,22,0.4)', fontFamily: 'system-ui', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: '0.05rem' }}>
         {label}
       </dt>
-      <dd style={{ margin: 0, fontSize: '0.88rem', color: '#0a0a16', fontFamily: mono ? 'monospace' : 'system-ui', lineHeight: 1.5 }}>
+      <dd style={{ margin: 0, fontSize: '0.88rem', color: '#4f5d75', fontFamily: mono ? 'monospace' : 'system-ui', lineHeight: 1.5 }}>
         {value}
       </dd>
     </div>
@@ -453,34 +453,34 @@ const s: Record<string, React.CSSProperties> = {
   wrap:       { display: 'flex', flexDirection: 'column', gap: '1rem' },
   card:       { background: '#fff', borderRadius: '10px', boxShadow: '0 1px 8px rgba(10,10,22,0.07)', padding: '1.5rem', border: '1px solid rgba(10,10,22,0.06)' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
-  cardTitle:  { margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#0a0a16', fontFamily: 'system-ui' },
+  cardTitle:  { margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#4f5d75', fontFamily: 'system-ui' },
   editBtn:    { background: 'none', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontFamily: 'system-ui', color: 'rgba(10,10,22,0.6)', cursor: 'pointer' },
   dl:         { margin: 0 },
   grid:       { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.9rem', marginBottom: '1.25rem' },
   field:      {},
   label:      { display: 'block', fontSize: '0.74rem', fontWeight: 600, color: 'rgba(10,10,22,0.45)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem', fontFamily: 'system-ui' },
-  input:      { width: '100%', padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.88rem', fontFamily: 'system-ui', color: '#0a0a16', background: '#fff', boxSizing: 'border-box' },
-  textarea:   { width: '100%', padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.88rem', fontFamily: 'system-ui', color: '#0a0a16', background: '#fff', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 },
+  input:      { width: '100%', padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.88rem', fontFamily: 'system-ui', color: '#4f5d75', background: '#fff', boxSizing: 'border-box' },
+  textarea:   { width: '100%', padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.88rem', fontFamily: 'system-ui', color: '#4f5d75', background: '#fff', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 },
   editBtns:   { display: 'flex', gap: '0.6rem' },
-  saveBtn:    { background: '#0a0a16', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.5rem 1.1rem', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
+  saveBtn:    { background: '#4f5d75', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.5rem 1.1rem', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
   cancelBtn:  { background: 'none', border: '1px solid rgba(10,10,22,0.15)', borderRadius: '6px', padding: '0.5rem 1rem', fontSize: '0.85rem', fontFamily: 'system-ui', color: 'rgba(10,10,22,0.55)', cursor: 'pointer' },
   statusRow:  { display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' },
   badge:      { fontSize: '0.75rem', fontWeight: 700, fontFamily: 'system-ui', letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: '999px', padding: '0.25em 0.7em' },
   transitionBtns: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' },
-  advanceBtn: { background: '#0a0a16', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
+  advanceBtn: { background: '#4f5d75', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
   cancelStatusBtn: { background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
   memRow:     { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' },
-  memName:    { margin: '0 0 0.2rem', fontSize: '0.92rem', fontWeight: 600, color: '#0a0a16', fontFamily: 'system-ui' },
+  memName:    { margin: '0 0 0.2rem', fontSize: '0.92rem', fontWeight: 600, color: '#4f5d75', fontFamily: 'system-ui' },
   memMeta:    { margin: 0, fontSize: '0.76rem', color: 'rgba(10,10,22,0.45)', fontFamily: 'system-ui' },
   memActions: { display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 },
-  memLink:    { color: '#c9a96e', fontSize: '0.82rem', fontFamily: 'system-ui', fontWeight: 600, textDecoration: 'none' },
+  memLink:    { color: '#cdba93', fontSize: '0.82rem', fontFamily: 'system-ui', fontWeight: 600, textDecoration: 'none' },
   unlinkBtn:  { background: 'none', border: '1px solid rgba(10,10,22,0.15)', borderRadius: '5px', padding: '0.25rem 0.65rem', fontSize: '0.76rem', fontFamily: 'system-ui', color: 'rgba(10,10,22,0.5)', cursor: 'pointer' },
   noMem:      { margin: '0 0 0.75rem', fontSize: '0.82rem', color: 'rgba(10,10,22,0.4)', fontFamily: 'system-ui', fontStyle: 'italic' },
   noMemHint:  { margin: 0, fontSize: '0.82rem', color: 'rgba(10,10,22,0.4)', fontFamily: 'system-ui', lineHeight: 1.6 },
   linkRow:    { display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' },
-  select:     { padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'system-ui', color: '#0a0a16', background: '#fff', minWidth: '200px' },
-  linkBtn:    { background: '#0a0a16', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
-  inlineLink: { color: '#c9a96e', fontWeight: 600, textDecoration: 'none' },
+  select:     { padding: '0.45rem 0.65rem', border: '1px solid rgba(10,10,22,0.18)', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'system-ui', color: '#4f5d75', background: '#fff', minWidth: '200px' },
+  linkBtn:    { background: '#4f5d75', color: '#f0ece4', border: 'none', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },
+  inlineLink: { color: '#cdba93', fontWeight: 600, textDecoration: 'none' },
   danger:     { background: '#fff', borderRadius: '10px', padding: '1.5rem', border: '1px solid #fecaca' },
   dangerTitle:{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 600, color: '#b91c1c', fontFamily: 'system-ui' },
   deleteBtn:  { background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'system-ui', cursor: 'pointer' },

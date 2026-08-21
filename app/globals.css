@@ -1,22 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
-
 :root {
-  /* ── Palette ── */
-  --ink:        #1a1a2e;
-  --ink-light:  #2d2d42;
-  --ink-muted:  #4a4a62;
-  --ivory:      #f5f0e8;
-  --ivory-dark: #ede7d9;
-  --ivory-mid:  #e8e0d0;
-  --gold:       #c9a96e;
-  --gold-light: #dfc99a;
-  --gold-muted: #c9a96e44;
-  --ash:        #8a8a9a;
-  --ash-light:  #b8b8c8;
+  /* ── Palette — Absolute Posterity brand ── */
+  --ink:        #4f5d75; /* Deep Slate Blue */
+  --ink-light:  #64738c;
+  --ink-muted:  #7c8aa0;
+  --ivory:      #f4f1ea; /* Natural Cream */
+  --ivory-dark: #e9e3d4;
+  --ivory-mid:  #efe9dc;
+  --gold:       #cdba93; /* Soft Warm Gold */
+  --gold-light: #ddccac;
+  --gold-muted: #cdba9344;
+  --ash:        #98a2b3;
+  --ash-light:  #c1c8d3;
   --white:      #fdfcfa;
 
   /* ── Typography ── */

@@ -166,10 +166,10 @@ export function OrgProductQueue({ initialRequests }: Props) {
               onClick={() => handleFilterChange(opt.value)}
               style={{
                 ...styles.filterBtn,
-                background: statusFilter === opt.value ? '#0a0a16' : '#fff',
+                background: statusFilter === opt.value ? '#4f5d75' : '#fff',
                 color:      statusFilter === opt.value ? '#f0ece4' : 'rgba(10,10,22,0.6)',
                 border:     statusFilter === opt.value
-                  ? '1px solid #0a0a16'
+                  ? '1px solid #4f5d75'
                   : '1px solid rgba(10,10,22,0.18)',
               }}
             >
@@ -395,7 +395,7 @@ const styles: Record<string, React.CSSProperties> = {
   memorial: {
     fontSize:   '0.92rem',
     fontWeight: 600,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   dot: {
@@ -471,7 +471,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily:   'system-ui, sans-serif',
     resize:       'vertical',
     lineHeight:   1.5,
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     boxSizing:    'border-box',
     marginBottom: '0.5rem',
   },
@@ -483,7 +483,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize:     '0.78rem',
     fontFamily:   'system-ui, sans-serif',
     cursor:       'pointer',
-    color:        '#0a0a16',
+    color:        '#4f5d75',
   },
   priceInput: {
     padding:      '0.45rem 0.7rem',
@@ -492,7 +492,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize:     '0.9rem',
     fontFamily:   'system-ui, sans-serif',
     width:        '140px',
-    color:        '#0a0a16',
+    color:        '#4f5d75',
   },
   transitionRow: {
     display:  'flex',
@@ -509,7 +509,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor:       'pointer',
   },
   advanceBtn: {
-    background: '#0a0a16',
+    background: '#4f5d75',
     color:      '#f0ece4',
   },
   cancelBtn: {

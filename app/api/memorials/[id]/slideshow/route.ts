@@ -28,8 +28,10 @@ function toProxyUrl(blobKey: string): string {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -38,7 +40,7 @@ export async function GET(
 
     // Org-aware ownership check (same as QR route).
     // Returns the memorial row or throws a 403/404 Response.
-    const memorial = await assertMemorialAccess(params.id, userId);
+    const memorial = await assertMemorialAccess(id, userId);
     if (!memorial) {
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
@@ -49,7 +51,7 @@ export async function GET(
     // Approved photos marked for tribute, in order.
     const photos = await prisma.collectionItem.findMany({
       where: {
-        memorialId: params.id,
+        memorialId: id,
         type:       'PHOTO',
         forTribute: true,
         status:     'APPROVED',
@@ -67,7 +69,7 @@ export async function GET(
 
     // Music track linked via TributeVideo (reuse existing config — no new fields).
     const tributeVideo = await prisma.tributeVideo.findUnique({
-      where:  { memorialId: params.id },
+      where:  { memorialId: id },
       select: {
         musicTrackId:  true,
         titleCardText: true,

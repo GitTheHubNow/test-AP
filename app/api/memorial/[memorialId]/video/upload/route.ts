@@ -45,14 +45,16 @@ const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200MB — generous for a rendered 
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
     // ── CHANGED: org-aware ownership check (was: findFirst with no user check)
-    const memorial = await assertMemorialAccess(params.memorialId, userId);
+    const memorial = await assertMemorialAccess(memorialId, userId);
     if (!memorial) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     // ────────────────────────────────────────────────────────────────────────
 
@@ -97,14 +99,14 @@ export async function POST(
     // Save to storage (dev = /public/uploads, prod = S3/R2)
 const blobKey = await saveUploadedFile(
   file,
-  `memorials/${params.memorialId}/video`
+  `memorials/${memorialId}/video`
 );
 
     // Upsert TributeVideo record with the saved key
     await prisma.tributeVideo.upsert({
-      where:  { memorialId: params.memorialId },
+      where:  { memorialId: memorialId },
       create: {
-        memorialId:  params.memorialId,
+        memorialId:  memorialId,
         webBlobKey:  blobKey,
         hdBlobKey:   blobKey,
         status:      'COMPLETE',

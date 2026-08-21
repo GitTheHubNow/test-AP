@@ -23,15 +23,17 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -45,18 +47,18 @@ export async function GET(
     ] = await Promise.all([
       // Total views all time
       prisma.pageView.count({
-        where: { memorialId: params.memorialId },
+        where: { memorialId: memorialId },
       }),
 
       // Unique visitors all time
       prisma.pageView.groupBy({
         by:    ['visitorToken'],
-        where: { memorialId: params.memorialId },
+        where: { memorialId: memorialId },
       }),
 
       // All views in last 30 days (for day-by-day chart)
       prisma.pageView.findMany({
-        where:   { memorialId: params.memorialId, createdAt: { gte: thirtyDaysAgo } },
+        where:   { memorialId: memorialId, createdAt: { gte: thirtyDaysAgo } },
         select:  { createdAt: true },
         orderBy: { createdAt: 'asc' },
       }),
@@ -64,7 +66,7 @@ export async function GET(
       // Views by referrer
       prisma.pageView.groupBy({
         by:    ['referrer'],
-        where: { memorialId: params.memorialId },
+        where: { memorialId: memorialId },
         _count: { referrer: true },
         orderBy: { _count: { referrer: 'desc' } },
       }),
@@ -72,7 +74,7 @@ export async function GET(
       // Top memories by reaction count
       prisma.memory.findMany({
         where: {
-          memorialId: params.memorialId,
+          memorialId: memorialId,
           status:     MemoryStatus.APPROVED,
         },
         select: {

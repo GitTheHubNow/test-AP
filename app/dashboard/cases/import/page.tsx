@@ -92,7 +92,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:       '0 0 0.4rem',
     fontSize:     '1.4rem',
     fontWeight:   700,
-    color:        '#0a0a16',
+    color:        '#4f5d75',
     fontFamily:   'system-ui, sans-serif',
   },
   subtitle: {
@@ -122,7 +122,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.7,
   },
   templateLink: {
-    color:          '#c9a96e',
+    color:          '#cdba93',
     fontSize:       '0.82rem',
     fontFamily:     'system-ui, sans-serif',
     fontWeight:     600,

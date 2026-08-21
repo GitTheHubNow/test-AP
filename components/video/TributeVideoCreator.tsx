@@ -51,7 +51,7 @@ type RenderState = 'idle' | 'loading_ffmpeg' | 'rendering' | 'done' | 'error';
 // ── Theme definitions ──────────────────────────────────────────────────────
 
 const THEMES: { key: Theme; label: string; description: string; bg: string; accent: string; font: string }[] = [
-  { key: 'CLASSIC',     label: 'Classic Elegance',      description: 'Black, ivory & gold — traditional services',       bg: '#0a0806', accent: '#c9a96e', font: 'Georgia, serif' },
+  { key: 'CLASSIC',     label: 'Classic Elegance',      description: 'Black, ivory & gold — traditional services',       bg: '#414d61', accent: '#cdba93', font: 'Georgia, serif' },
   { key: 'MODERN',      label: 'Modern Minimal',         description: 'White, charcoal & slate — contemporary',           bg: '#f8f8f8', accent: '#2d3748', font: 'system-ui, sans-serif' },
   { key: 'RUSTIC',      label: 'Warm & Rustic',          description: 'Cream, terracotta & sage — celebration of life',   bg: '#faf6f0', accent: '#9b4523', font: 'Georgia, serif' },
   { key: 'CELEBRATION', label: 'Bright Celebration',     description: 'Sky, coral & sunshine — joyful farewell',          bg: '#f0f9ff', accent: '#e85d04', font: 'system-ui, sans-serif' },
@@ -84,7 +84,7 @@ function Timeline({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem', border: '2px dashed #2a2a3e', borderRadius: 8, color: '#5a5870' }}>
+        <div style={{ textAlign: 'center', padding: '3rem 1rem', border: '2px dashed #5c6a80', borderRadius: 8, color: '#8290a3' }}>
           <p style={{ margin: 0, fontSize: '0.85rem' }}>Select photos from the left panel</p>
         </div>
       )}
@@ -103,18 +103,18 @@ function Timeline({
           style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: '#16152a', borderRadius: 8, padding: '0.5rem 0.75rem',
-            border: '1px solid #2a2a3e', cursor: 'grab', userSelect: 'none',
+            border: '1px solid #5c6a80', cursor: 'grab', userSelect: 'none',
           }}>
           {/* Drag handle */}
           <span style={{ color: '#3a3a5e', fontSize: '0.85rem', cursor: 'grab' }}>⠿</span>
 
           {/* Thumbnail */}
-          <div style={{ width: 40, height: 40, borderRadius: 4, overflow: 'hidden', flexShrink: 0, background: '#0a0a1a' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 4, overflow: 'hidden', flexShrink: 0, background: '#3f4c61' }}>
             {item.url && <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
           </div>
 
           {/* Index */}
-          <span style={{ fontSize: '0.68rem', color: '#5a5870', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
+          <span style={{ fontSize: '0.68rem', color: '#8290a3', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
 
           {/* Caption */}
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -134,17 +134,17 @@ function Timeline({
                 onDurationChange(item.id, isNaN(v) ? null : Math.max(1, Math.min(30, v)));
               }}
               style={{
-                width: 52, padding: '0.25rem 0.4rem', background: '#0a0a1a',
-                border: '1px solid #2a2a3e', borderRadius: 4,
+                width: 52, padding: '0.25rem 0.4rem', background: '#3f4c61',
+                border: '1px solid #5c6a80', borderRadius: 4,
                 color: '#c9c2e8', fontSize: '0.72rem', textAlign: 'center',
               }}
             />
-            <span style={{ fontSize: '0.6rem', color: '#5a5870' }}>s</span>
+            <span style={{ fontSize: '0.6rem', color: '#8290a3' }}>s</span>
           </div>
 
           {/* Remove */}
           <button onClick={() => onRemove(item.id)}
-            style={{ background: 'none', border: 'none', color: '#5a5870', cursor: 'pointer', fontSize: '0.85rem', padding: '0.1rem 0.25rem', lineHeight: 1 }}>
+            style={{ background: 'none', border: 'none', color: '#8290a3', cursor: 'pointer', fontSize: '0.85rem', padding: '0.1rem 0.25rem', lineHeight: 1 }}>
             ✕
           </button>
         </div>
@@ -188,15 +188,15 @@ function MusicPicker({ tracks, selectedId, onSelect }: {
         {['ALL', ...MUSIC_CATEGORIES].map(cat => (
           <button key={cat} onClick={() => setCategory(cat)}
             style={{ fontSize: '0.65rem', padding: '0.25rem 0.6rem', borderRadius: 999, border: 'none', cursor: 'pointer', fontWeight: 500,
-              background: category === cat ? '#c9a96e' : '#1a1a2e',
-              color:      category === cat ? '#0a0a1a' : '#8a8aaa' }}>
+              background: category === cat ? '#cdba93' : '#4f5d75',
+              color:      category === cat ? '#3f4c61' : '#8a8aaa' }}>
             {cat}
           </button>
         ))}
       </div>
 
       {tracks.length === 0 && (
-        <p style={{ fontSize: '0.78rem', color: '#5a5870', fontStyle: 'italic', padding: '1rem 0' }}>
+        <p style={{ fontSize: '0.78rem', color: '#8290a3', fontStyle: 'italic', padding: '1rem 0' }}>
           No music tracks in library yet. Add tracks via the admin panel or upload a custom track below.
         </p>
       )}
@@ -206,38 +206,38 @@ function MusicPicker({ tracks, selectedId, onSelect }: {
         <div onClick={() => onSelect(null)}
           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem', borderRadius: 6, cursor: 'pointer',
             background: selectedId === null ? 'rgba(201,169,110,0.12)' : 'transparent',
-            border: `1px solid ${selectedId === null ? '#c9a96e' : '#2a2a3e'}` }}>
-          <span style={{ fontSize: '0.72rem', color: selectedId === null ? '#c9a96e' : '#5a5870' }}>No music (silent)</span>
+            border: `1px solid ${selectedId === null ? '#cdba93' : '#5c6a80'}` }}>
+          <span style={{ fontSize: '0.72rem', color: selectedId === null ? '#cdba93' : '#8290a3' }}>No music (silent)</span>
         </div>
 
         {filtered.map(track => (
           <div key={track.id} onClick={() => onSelect(track.id)}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem', borderRadius: 6, cursor: 'pointer',
               background: selectedId === track.id ? 'rgba(201,169,110,0.12)' : 'transparent',
-              border: `1px solid ${selectedId === track.id ? '#c9a96e' : '#2a2a3e'}` }}>
+              border: `1px solid ${selectedId === track.id ? '#cdba93' : '#5c6a80'}` }}>
 
             {/* Play preview */}
             {track.previewUrl && (
               <button onClick={e => { e.stopPropagation(); togglePreview(track); }}
-                style={{ width: 24, height: 24, borderRadius: '50%', border: `1px solid #c9a96e`, background: 'transparent', color: '#c9a96e', cursor: 'pointer', fontSize: '0.6rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 24, height: 24, borderRadius: '50%', border: `1px solid #cdba93`, background: 'transparent', color: '#cdba93', cursor: 'pointer', fontSize: '0.6rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {playing === track.id ? '■' : '▶'}
               </button>
             )}
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: selectedId === track.id ? '#c9a96e' : '#c9c2e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: selectedId === track.id ? '#cdba93' : '#c9c2e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {track.title}
               </p>
               {track.artist && (
-                <p style={{ margin: 0, fontSize: '0.65rem', color: '#5a5870' }}>{track.artist}</p>
+                <p style={{ margin: 0, fontSize: '0.65rem', color: '#8290a3' }}>{track.artist}</p>
               )}
             </div>
 
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.6rem', color: '#3a3a5e', background: '#1a1a2e', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
+              <span style={{ fontSize: '0.6rem', color: '#3a3a5e', background: '#4f5d75', padding: '0.1rem 0.4rem', borderRadius: 3 }}>
                 {track.category}
               </span>
-              <span style={{ fontSize: '0.65rem', color: '#5a5870' }}>
+              <span style={{ fontSize: '0.65rem', color: '#8290a3' }}>
                 {formatDuration(track.durationSeconds)}
               </span>
             </div>
@@ -252,12 +252,12 @@ function MusicPicker({ tracks, selectedId, onSelect }: {
 
 function RenderProgress({ progress, stage }: { progress: number; stage: string }) {
   return (
-    <div style={{ padding: '1.5rem', background: '#0a0a1a', borderRadius: 10, border: '1px solid #2a2a3e' }}>
-      <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: '#c9a96e' }}>{stage}</p>
-      <div style={{ height: 6, background: '#1a1a2e', borderRadius: 999, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #c9a96e, #e8c87e)', borderRadius: 999, transition: 'width 0.3s' }} />
+    <div style={{ padding: '1.5rem', background: '#3f4c61', borderRadius: 10, border: '1px solid #5c6a80' }}>
+      <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: '#cdba93' }}>{stage}</p>
+      <div style={{ height: 6, background: '#4f5d75', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #cdba93, #e8c87e)', borderRadius: 999, transition: 'width 0.3s' }} />
       </div>
-      <p style={{ margin: '0.5rem 0 0', fontSize: '0.68rem', color: '#5a5870', textAlign: 'right' }}>{Math.round(progress)}%</p>
+      <p style={{ margin: '0.5rem 0 0', fontSize: '0.68rem', color: '#8290a3', textAlign: 'right' }}>{Math.round(progress)}%</p>
     </div>
   );
 }
@@ -326,7 +326,7 @@ function CanvasPreview({ photos, theme, titleText, endText, currentIdx }: {
 
   return (
     <canvas ref={canvasRef} width={640} height={360}
-      style={{ width: '100%', borderRadius: 8, border: '1px solid #2a2a3e', background: t.bg }} />
+      style={{ width: '100%', borderRadius: 8, border: '1px solid #5c6a80', background: t.bg }} />
   );
 }
 
@@ -649,34 +649,34 @@ console.log('[ffmpeg] render complete');
 
   const panelHead: React.CSSProperties = {
     fontSize: '0.6rem', letterSpacing: '0.22em', textTransform: 'uppercase',
-    color: '#c9a96e', marginBottom: '1rem', fontFamily: 'Georgia, serif',
+    color: '#cdba93', marginBottom: '1rem', fontFamily: 'Georgia, serif',
   };
 
   const inp: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '0.6rem 0.75rem',
-    background: '#0a0a1a', border: '1px solid #2a2a3e', borderRadius: 6,
+    background: '#3f4c61', border: '1px solid #5c6a80', borderRadius: 6,
     color: '#c9c2e8', fontSize: '0.85rem', fontFamily: 'Georgia, serif', outline: 'none',
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a16', color: '#c9c2e8', fontFamily: 'Georgia, serif' }}>
+    <div style={{ minHeight: '100vh', background: '#4f5d75', color: '#c9c2e8', fontFamily: 'Georgia, serif' }}>
 
       {/* Top bar */}
-      <div style={{ background: '#0d0c1e', borderBottom: '1px solid #1e1e38', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 50 }}>
+      <div style={{ background: '#3f4c61', borderBottom: '1px solid #5c6a80', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 50 }}>
         <Link href={`/dashboard/memorial/${memorial.id}/photos`}
-          style={{ fontSize: '0.75rem', color: '#5a5870', textDecoration: 'none' }}>
+          style={{ fontSize: '0.75rem', color: '#8290a3', textDecoration: 'none' }}>
           ← Photos
         </Link>
-        <span style={{ color: '#2a2a3e' }}>|</span>
-        <p style={{ margin: 0, fontSize: '0.85rem', color: '#f5f0e8' }}>
-          Tribute Video — <span style={{ color: '#c9a96e' }}>{memorial.displayName}</span>
+        <span style={{ color: '#5c6a80' }}>|</span>
+        <p style={{ margin: 0, fontSize: '0.85rem', color: '#f4f1ea' }}>
+          Tribute Video — <span style={{ color: '#cdba93' }}>{memorial.displayName}</span>
         </p>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: '0.72rem', color: '#5a5870' }}>
+        <span style={{ fontSize: '0.72rem', color: '#8290a3' }}>
           {timeline.length} photo{timeline.length !== 1 ? 's' : ''} · {formatDuration(totalDuration)}
         </span>
         <button onClick={saveConfig} disabled={saving}
-          style={{ fontSize: '0.75rem', padding: '0.4rem 1rem', borderRadius: 5, border: '1px solid #2a2a3e', background: saved ? '#065F46' : 'transparent', color: saved ? '#6EE7B7' : '#8a8aaa', cursor: 'pointer' }}>
+          style={{ fontSize: '0.75rem', padding: '0.4rem 1rem', borderRadius: 5, border: '1px solid #5c6a80', background: saved ? '#065F46' : 'transparent', color: saved ? '#6EE7B7' : '#8a8aaa', cursor: 'pointer' }}>
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
         </button>
       </div>
@@ -685,7 +685,7 @@ console.log('[ffmpeg] render complete');
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 280px', height: 'calc(100vh - 53px)', overflow: 'hidden' }}>
 
         {/* ── LEFT: Photo selector ── */}
-        <div style={{ borderRight: '1px solid #1e1e38', overflow: 'auto', padding: '1.25rem 1rem' }}>
+        <div style={{ borderRight: '1px solid #5c6a80', overflow: 'auto', padding: '1.25rem 1rem' }}>
           <p style={panelHead}>Photos</p>
 
           {/* Filter toggle */}
@@ -693,8 +693,8 @@ console.log('[ffmpeg] render complete');
             {(['selected', 'all'] as const).map(f => (
               <button key={f} onClick={() => setPhotoFilter(f)}
                 style={{ flex: 1, fontSize: '0.65rem', padding: '0.3rem', borderRadius: 4, border: 'none', cursor: 'pointer', fontWeight: 500,
-                  background: photoFilter === f ? '#c9a96e' : '#1a1a2e',
-                  color:      photoFilter === f ? '#0a0a1a' : '#5a5870' }}>
+                  background: photoFilter === f ? '#cdba93' : '#4f5d75',
+                  color:      photoFilter === f ? '#3f4c61' : '#8290a3' }}>
                 {f === 'selected' ? `Selected (${timeline.length})` : `All (${allPhotos.length})`}
               </button>
             ))}
@@ -702,11 +702,11 @@ console.log('[ffmpeg] render complete');
 
           {allPhotos.length === 0 && (
             <div style={{ textAlign: 'center', padding: '2rem 0.5rem' }}>
-              <p style={{ fontSize: '0.75rem', color: '#5a5870', lineHeight: 1.6 }}>
+              <p style={{ fontSize: '0.75rem', color: '#8290a3', lineHeight: 1.6 }}>
                 No photos marked "For Tribute" yet.
               </p>
               <Link href={`/dashboard/memorial/${memorial.id}/photos`}
-                style={{ fontSize: '0.72rem', color: '#c9a96e', textDecoration: 'none' }}>
+                style={{ fontSize: '0.72rem', color: '#cdba93', textDecoration: 'none' }}>
                 Go to Photo Manager →
               </Link>
             </div>
@@ -718,13 +718,13 @@ console.log('[ffmpeg] render complete');
               return (
                 <div key={photo.id}
                   onClick={() => inTl ? removeFromTimeline(photo.id) : addPhoto(photo)}
-                  style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${inTl ? '#c9a96e' : 'transparent'}`, background: '#1a1a2e' }}>
+                  style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${inTl ? '#cdba93' : 'transparent'}`, background: '#4f5d75' }}>
                   {photo.url
                     ? <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3a3a5e', fontSize: '1.2rem' }}>📷</div>
                   }
                   {inTl && (
-                    <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: '50%', background: '#c9a96e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', color: '#0a0a1a', fontWeight: 700 }}>
+                    <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: '50%', background: '#cdba93', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', color: '#3f4c61', fontWeight: 700 }}>
                       {timeline.findIndex(p => p.id === photo.id) + 1}
                     </div>
                   )}
@@ -748,17 +748,17 @@ console.log('[ffmpeg] render complete');
             {/* Preview scrubber */}
             <div style={{ display: 'flex', gap: 4, marginTop: '0.75rem', overflowX: 'auto', paddingBottom: 4 }}>
               <button onClick={() => setPreviewIdx(-1)}
-                style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === -1 ? '#c9a96e' : '#2a2a3e'}`, background: 'transparent', color: previewIdx === -1 ? '#c9a96e' : '#5a5870', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === -1 ? '#cdba93' : '#5c6a80'}`, background: 'transparent', color: previewIdx === -1 ? '#cdba93' : '#8290a3', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Title
               </button>
               {timeline.map((p, i) => (
                 <button key={p.id} onClick={() => setPreviewIdx(i)}
-                  style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === i ? '#c9a96e' : '#2a2a3e'}`, background: 'transparent', color: previewIdx === i ? '#c9a96e' : '#5a5870', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === i ? '#cdba93' : '#5c6a80'}`, background: 'transparent', color: previewIdx === i ? '#cdba93' : '#8290a3', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   {i + 1}
                 </button>
               ))}
               <button onClick={() => setPreviewIdx(timeline.length)}
-                style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === timeline.length ? '#c9a96e' : '#2a2a3e'}`, background: 'transparent', color: previewIdx === timeline.length ? '#c9a96e' : '#5a5870', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                style={{ fontSize: '0.6rem', padding: '0.25rem 0.5rem', borderRadius: 3, border: `1px solid ${previewIdx === timeline.length ? '#cdba93' : '#5c6a80'}`, background: 'transparent', color: previewIdx === timeline.length ? '#cdba93' : '#8290a3', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 End
               </button>
             </div>
@@ -768,7 +768,7 @@ console.log('[ffmpeg] render complete');
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
               <p style={{ ...panelHead, margin: 0 }}>Timeline</p>
-              <span style={{ fontSize: '0.65rem', color: '#5a5870' }}>
+              <span style={{ fontSize: '0.65rem', color: '#8290a3' }}>
                 Auto duration: {autoDuration.toFixed(1)}s · Total: {formatDuration(totalDuration)}
               </span>
             </div>
@@ -800,7 +800,7 @@ console.log('[ffmpeg] render complete');
         </div>
 
         {/* ── RIGHT: Settings + export ── */}
-        <div style={{ borderLeft: '1px solid #1e1e38', overflow: 'auto', padding: '1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ borderLeft: '1px solid #5c6a80', overflow: 'auto', padding: '1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
           {/* Theme */}
           <div>
@@ -808,12 +808,12 @@ console.log('[ffmpeg] render complete');
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {THEMES.map(t => (
                 <div key={t.key} onClick={() => setTheme(t.key)}
-                  style={{ padding: '0.6rem 0.75rem', borderRadius: 6, cursor: 'pointer', border: `1px solid ${theme === t.key ? '#c9a96e' : '#2a2a3e'}`, background: theme === t.key ? 'rgba(201,169,110,0.08)' : 'transparent' }}>
+                  style={{ padding: '0.6rem 0.75rem', borderRadius: 6, cursor: 'pointer', border: `1px solid ${theme === t.key ? '#cdba93' : '#5c6a80'}`, background: theme === t.key ? 'rgba(201,169,110,0.08)' : 'transparent' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
                     <div style={{ width: 12, height: 12, borderRadius: 2, background: t.accent, flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.78rem', color: theme === t.key ? '#c9a96e' : '#c9c2e8', fontWeight: 500 }}>{t.label}</span>
+                    <span style={{ fontSize: '0.78rem', color: theme === t.key ? '#cdba93' : '#c9c2e8', fontWeight: 500 }}>{t.label}</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.65rem', color: '#5a5870' }}>{t.description}</p>
+                  <p style={{ margin: 0, fontSize: '0.65rem', color: '#8290a3' }}>{t.description}</p>
                 </div>
               ))}
             </div>
@@ -826,9 +826,9 @@ console.log('[ffmpeg] render complete');
           </div>
 
           {/* Show on memorial toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#0d0c1e', borderRadius: 8, border: '1px solid #1e1e38' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#3f4c61', borderRadius: 8, border: '1px solid #5c6a80' }}>
             <input type="checkbox" id="showOnPage" checked={showOnPage} onChange={e => setShowOnPage(e.target.checked)}
-              style={{ width: 14, height: 14, accentColor: '#c9a96e' }} />
+              style={{ width: 14, height: 14, accentColor: '#cdba93' }} />
             <label htmlFor="showOnPage" style={{ fontSize: '0.78rem', color: '#8a8aaa', cursor: 'pointer', lineHeight: 1.4 }}>
               Show video on memorial page
             </label>
@@ -847,8 +847,8 @@ console.log('[ffmpeg] render complete');
                   disabled={timeline.length === 0}
                   style={{
                     padding: '0.875rem', borderRadius: 8, border: 'none', cursor: timeline.length > 0 ? 'pointer' : 'not-allowed',
-                    background: timeline.length > 0 ? 'linear-gradient(135deg, #c9a96e, #e8c87e)' : '#1a1a2e',
-                    color: timeline.length > 0 ? '#0a0a1a' : '#3a3a5e',
+                    background: timeline.length > 0 ? 'linear-gradient(135deg, #cdba93, #e8c87e)' : '#4f5d75',
+                    color: timeline.length > 0 ? '#3f4c61' : '#3a3a5e',
                     fontWeight: 700, fontSize: '0.875rem', fontFamily: 'Georgia, serif',
                     transition: 'opacity 0.15s',
                   }}>
@@ -864,17 +864,17 @@ console.log('[ffmpeg] render complete');
             {downloadUrl && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <a href={downloadUrl} download={`${memorial.displayName.replace(/\s+/g, '-')}-tribute.mp4`}
-                  style={{ display: 'block', padding: '0.75rem', textAlign: 'center', borderRadius: 8, border: '1px solid #c9a96e', color: '#c9a96e', textDecoration: 'none', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
+                  style={{ display: 'block', padding: '0.75rem', textAlign: 'center', borderRadius: 8, border: '1px solid #cdba93', color: '#cdba93', textDecoration: 'none', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
                   ↓ Download MP4
                 </a>
-                <p style={{ fontSize: '0.65rem', color: '#5a5870', textAlign: 'center', margin: 0 }}>
+                <p style={{ fontSize: '0.65rem', color: '#8290a3', textAlign: 'center', margin: 0 }}>
                   HD 1080p · Chapel screen ready
                 </p>
               </div>
             )}
 
             {timeline.length === 0 && (
-              <p style={{ fontSize: '0.72rem', color: '#5a5870', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.72rem', color: '#8290a3', textAlign: 'center' }}>
                 Add at least one photo to render
               </p>
             )}

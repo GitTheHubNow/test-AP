@@ -123,7 +123,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin:     0,
     fontSize:   '1.4rem',
     fontWeight: 700,
-    color:      '#0a0a16',
+    color:      '#4f5d75',
     fontFamily: 'system-ui, sans-serif',
   },
   subtitle: {

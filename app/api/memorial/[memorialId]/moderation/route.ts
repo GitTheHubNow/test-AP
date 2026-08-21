@@ -24,8 +24,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     // 1. AUTHENTICATION
     const { userId } = await auth();
@@ -38,10 +40,10 @@ export async function GET(
     }
 
     // 2. AUTHORIZATION - org-scoped access check
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: {
         id: true,
         title: true,
@@ -58,7 +60,7 @@ export async function GET(
     // 3. FETCH PENDING MEMORIES + MEDIA
     const memories = await prisma.memory.findMany({
       where: { 
-        memorialId: params.memorialId,
+        memorialId: memorialId,
         status: MemoryStatus.PENDING,
       },
       orderBy: { createdAt: 'desc' },

@@ -32,8 +32,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
 
@@ -44,10 +46,10 @@ export async function DELETE(
       );
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'delete');
+    await assertMemorialAccess(memorialId, userId, 'delete');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: { sealed: true, status: true, title: true },
     });
 
@@ -76,7 +78,7 @@ export async function DELETE(
     }
 
     await prisma.memorial.update({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       data: { status: MemorialStatus.ARCHIVED },
     });
 

@@ -17,8 +17,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { memorialId: string; entryId: string } }
+  { params }: { params: Promise<{ memorialId: string; entryId: string }> }
 ) {
+  const { memorialId, entryId } = await params;
+
   try {
     const { userId } = await auth();
 
@@ -29,14 +31,14 @@ export async function PATCH(
       );
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const entry = await prisma.guestBookEntry.findUnique({
-      where: { id: params.entryId },
+      where: { id: entryId },
       select: { id: true, memorialId: true, pinned: true },
     });
 
-    if (!entry || entry.memorialId !== params.memorialId) {
+    if (!entry || entry.memorialId !== memorialId) {
       return NextResponse.json(
         { success: false, error: 'Guest book entry not found' },
         { status: 404 }
@@ -54,7 +56,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.guestBookEntry.update({
-      where: { id: params.entryId },
+      where: { id: entryId },
       data: { pinned },
       select: { id: true, pinned: true },
     });

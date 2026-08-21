@@ -17,8 +17,10 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string; memoryId: string } }
+  { params }: { params: Promise<{ memorialId: string; memoryId: string }> }
 ) {
+  const { memorialId, memoryId } = await params;
+
   try {
     const { userId } = await auth();
 
@@ -29,14 +31,14 @@ export async function POST(
       );
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memory = await prisma.memory.findUnique({
-      where:  { id: params.memoryId },
+      where:  { id: memoryId },
       select: { memorialId: true, status: true },
     });
 
-    if (!memory || memory.memorialId !== params.memorialId) {
+    if (!memory || memory.memorialId !== memorialId) {
       return NextResponse.json(
         { success: false, error: 'Memory not found' },
         { status: 404 }
@@ -45,11 +47,11 @@ export async function POST(
 
     await prisma.$transaction([
       prisma.memory.update({
-        where: { id: params.memoryId },
+        where: { id: memoryId },
         data:  { status: MemoryStatus.APPROVED, rejectedAt: null, stale: false },
       }),
       prisma.media.updateMany({
-        where: { memoryId: params.memoryId, status: MediaStatus.PENDING },
+        where: { memoryId: memoryId, status: MediaStatus.PENDING },
         data:  { status: MediaStatus.APPROVED, rejectedAt: null },
       }),
     ]);

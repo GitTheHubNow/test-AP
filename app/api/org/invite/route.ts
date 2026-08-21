@@ -108,13 +108,13 @@ export async function POST(request: NextRequest) {
 
     await sendEmail({
       to:      normalisedEmail,
-      subject: `You've been invited to join ${org.name} on Memoriam`,
+      subject: `You've been invited to join ${org.name} on Absolute Posterity`,
       html: `
-        <p>You've been invited to join <strong>${org.name}</strong> as a team member on Memoriam.</p>
+        <p>You've been invited to join <strong>${org.name}</strong> as a team member on Absolute Posterity.</p>
         <p><a href="${acceptUrl}">Accept invitation</a></p>
         <p>This invite expires in ${INVITE_EXPIRY_DAYS} days. If you weren't expecting this, you can ignore this email.</p>
       `,
-      text: `You've been invited to join ${org.name} on Memoriam.\n\nAccept here: ${acceptUrl}\n\nThis invite expires in ${INVITE_EXPIRY_DAYS} days.`,
+      text: `You've been invited to join ${org.name} on Absolute Posterity.\n\nAccept here: ${acceptUrl}\n\nThis invite expires in ${INVITE_EXPIRY_DAYS} days.`,
     });
 
     return NextResponse.json({ success: true, data: { invite } });

@@ -19,8 +19,10 @@ export const dynamic = 'force-dynamic';
 // Minimal metadata — page is meant to be fullscreen, title shows in browser tab
 // and on TV input selector.
 export async function generateMetadata({ params }: Props) {
+  const { memorialId } = await params;
+
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: { title: true, firstName: true, lastName: true, preferredName: true },
   });
   if (!memorial) return { title: 'Slideshow' };
@@ -33,16 +35,18 @@ export async function generateMetadata({ params }: Props) {
 }
 
 interface Props {
-  params: { memorialId: string };
+  params: Promise<{ memorialId: string }>;
 }
 
 export default async function SlideshowPage({ params }: Props) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   // Lightweight ownership check — full feature-flag check happens in the API.
   const memorial = await prisma.memorial.findUnique({
-    where:  { id: params.memorialId },
+    where:  { id: memorialId },
     select: {
       id:            true,
       ownerId:       true,
@@ -64,10 +68,10 @@ export default async function SlideshowPage({ params }: Props) {
   return (
     // Black page shell — SlideshowPageClient renders fixed-position content
     // that covers the viewport; this prevents any flash of white background.
-    <html style={{ background: '#0a0a16' }}>
-      <body style={{ margin: 0, background: '#0a0a16' }}>
+    <html style={{ background: '#4f5d75' }}>
+      <body style={{ margin: 0, background: '#4f5d75' }}>
         <SlideshowPageClient
-          memorialId={params.memorialId}
+          memorialId={memorialId}
           memorialName={displayName}
         />
       </body>

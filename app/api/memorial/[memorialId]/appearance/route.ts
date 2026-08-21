@@ -8,8 +8,10 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -17,7 +19,7 @@ export async function PATCH(
     // FIXED: previously embedded the ownership check directly in the
     // Prisma `where` clause (`ownerId: userId`), which blocked org staff
     // the same way every other manual check in this sweep did.
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const body = await req.json();
     const {
@@ -33,9 +35,9 @@ export async function PATCH(
     } = body;
 
     const settings = await prisma.memorialSettings.upsert({
-      where:  { memorialId: params.memorialId },
+      where:  { memorialId: memorialId },
       create: {
-        memorialId:      params.memorialId,
+        memorialId:      memorialId,
         theme:           theme           ?? 'light',
         heroLayout:      heroLayout      ?? 'full-bleed',
         fontFamily:      fontFamily      ?? null,
@@ -72,8 +74,10 @@ export async function PATCH(
 // Helper — also expose GET so the editor can load current settings
 export async function GET(
   req: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -81,10 +85,10 @@ export async function GET(
     // FIXED: this handler previously had NO access check at all — any
     // authenticated user could read any memorial's appearance settings
     // by ID, not just staff at the owning org.
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
 
     const settings = await prisma.memorialSettings.findUnique({
-      where: { memorialId: params.memorialId },
+      where: { memorialId: memorialId },
     });
 
     return NextResponse.json({ settings });

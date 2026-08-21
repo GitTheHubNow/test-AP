@@ -175,7 +175,7 @@ export function CsvImportForm() {
           style={{
             ...s.dropZone,
             background:  dragging ? 'rgba(201,169,110,0.06)' : '#fafaf9',
-            borderColor: dragging ? '#c9a96e' : 'rgba(10,10,22,0.18)',
+            borderColor: dragging ? '#cdba93' : 'rgba(10,10,22,0.18)',
           }}
         >
           <div style={s.dropIcon}>
@@ -392,7 +392,7 @@ const s: Record<string, React.CSSProperties> = {
     userSelect:    'none',
   },
   dropIcon:  { marginBottom: '0.75rem' },
-  dropTitle: { margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 600, color: '#0a0a16', fontFamily: 'system-ui' },
+  dropTitle: { margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 600, color: '#4f5d75', fontFamily: 'system-ui' },
   dropSub:   { margin: 0, fontSize: '0.82rem', color: 'rgba(10,10,22,0.4)', fontFamily: 'system-ui' },
   previewHeader: {
     display:        'flex',
@@ -401,7 +401,7 @@ const s: Record<string, React.CSSProperties> = {
     marginBottom:   '1.25rem',
     gap:            '1rem',
   },
-  fileName:   { margin: '0 0 0.15rem', fontSize: '0.92rem', fontWeight: 600, color: '#0a0a16', fontFamily: 'system-ui' },
+  fileName:   { margin: '0 0 0.15rem', fontSize: '0.92rem', fontWeight: 600, color: '#4f5d75', fontFamily: 'system-ui' },
   rowCount:   { margin: 0, fontSize: '0.78rem', color: 'rgba(10,10,22,0.4)', fontFamily: 'system-ui' },
   changeBtn: {
     background:   'none',
@@ -429,11 +429,11 @@ const s: Record<string, React.CSSProperties> = {
   tableWrap:    { overflowX: 'auto', borderRadius: '6px', border: '1px solid rgba(10,10,22,0.1)' },
   table:        { width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'system-ui' },
   th:           { padding: '0.5rem 0.65rem', background: '#f7f5f2', color: 'rgba(10,10,22,0.55)', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(10,10,22,0.1)' },
-  td:           { padding: '0.45rem 0.65rem', color: '#0a0a16', borderBottom: '1px solid rgba(10,10,22,0.05)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  td:           { padding: '0.45rem 0.65rem', color: '#4f5d75', borderBottom: '1px solid rgba(10,10,22,0.05)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   moreRows:     { margin: '0.5rem 0 0', fontSize: '0.74rem', color: 'rgba(10,10,22,0.35)', fontFamily: 'system-ui' },
   actions:      { display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(10,10,22,0.07)' },
   importBtn: {
-    background:    '#0a0a16',
+    background:    '#4f5d75',
     color:         '#f0ece4',
     border:        'none',
     borderRadius:  '7px',

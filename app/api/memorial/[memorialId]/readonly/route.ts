@@ -7,14 +7,16 @@ import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return CommonErrors.unauthorized();
 
     // Validate param
-    const idValidation = validateParam(params.memorialId, MemorialIdSchema);
+    const idValidation = validateParam(memorialId, MemorialIdSchema);
     if (!idValidation.success) return CommonErrors.badRequest(idValidation.error);
 
     // Validate body
@@ -23,11 +25,11 @@ export async function POST(
 
     // Check org-scoped access BEFORE update — previously a manual
     // ownerId check that blocked org staff.
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     // Update
     await prisma.memorial.update({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       data: { readOnly: bodyValidation.data.readOnly },
     });
 

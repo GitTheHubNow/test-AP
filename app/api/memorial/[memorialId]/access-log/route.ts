@@ -6,8 +6,10 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
 
   if (!userId) {
@@ -22,7 +24,7 @@ export async function GET(
   // (lib/auth/getOrgForUser.ts) checks org membership + role, matching the
   // access control already used elsewhere (e.g. app/api/memorials/[id]/qr).
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'read');
+    await assertMemorialAccess(memorialId, userId, 'read');
   } catch (err) {
     return handleAuthError(err);
   }
@@ -31,8 +33,8 @@ export async function GET(
   const limit = parseInt(url.searchParams.get('limit') || '100');
 
   const [readLog, stats] = await Promise.all([
-    getMemorialReadLog(params.memorialId, limit),
-    getMemorialReadStats(params.memorialId),
+    getMemorialReadLog(memorialId, limit),
+    getMemorialReadStats(memorialId),
   ]);
 
   return NextResponse.json({

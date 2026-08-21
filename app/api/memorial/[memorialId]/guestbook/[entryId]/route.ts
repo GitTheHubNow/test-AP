@@ -17,22 +17,24 @@ import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { memorialId: string; entryId: string } }
+  { params }: { params: Promise<{ memorialId: string; entryId: string }> }
 ) {
+  const { memorialId, entryId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) return CommonErrors.unauthorized();
 
-    const memorialValidation = validateParam(params.memorialId, MemorialIdSchema);
+    const memorialValidation = validateParam(memorialId, MemorialIdSchema);
     if (!memorialValidation.success) return CommonErrors.badRequest(memorialValidation.error);
 
-    const entryValidation = validateParam(params.entryId, GuestBookIdSchema);
+    const entryValidation = validateParam(entryId, GuestBookIdSchema);
     if (!entryValidation.success) return CommonErrors.badRequest(entryValidation.error);
 
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memorial = await prisma.memorial.findUnique({
-      where: { id: params.memorialId },
+      where: { id: memorialId },
       select: { readOnly: true },
     });
 
@@ -40,10 +42,10 @@ export async function DELETE(
     if (memorial.readOnly) return CommonErrors.badRequest('Memorial is read-only');
 
     const entry = await prisma.guestBookEntry.findUnique({
-      where: { id: params.entryId },
+      where: { id: entryId },
       select: { id: true, memorialId: true },
     });
-    if (!entry || entry.memorialId !== params.memorialId) {
+    if (!entry || entry.memorialId !== memorialId) {
       return CommonErrors.notFound('Guest book entry');
     }
 
@@ -57,17 +59,17 @@ export async function DELETE(
       await tx.auditEvent.create({
         data: {
           entityType: EntityType.GUEST_BOOK_ENTRY,
-          entityId: params.entryId,
+          entityId: entryId,
           action: AuditAction.DELETE,
           actorId: userId,
           actorRole: ActorRole.FUNERAL_HOME,
           reasonCode: ReasonCode.DELETION,
-          metadata: { memorialId: params.memorialId },
+          metadata: { memorialId: memorialId },
         },
       });
 
       await tx.guestBookEntry.delete({
-        where: { id: params.entryId },
+        where: { id: entryId },
       });
     });
 

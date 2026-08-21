@@ -3,10 +3,9 @@
 // Resolves organisation branding into a typed theme object for public pages.
 // Never throws — always returns a valid theme.
 //
-// Design tokens match V1 UI exactly:
-//   primaryColor   #c9a96e — from CreateMemorialForm border focus, badge colours
-//   secondaryColor #0a0a16 — page background throughout V1
-// Changing these would break V1 memorial page appearance.
+// Design tokens — Absolute Posterity brand:
+//   primaryColor   #CDBA93 — Soft Warm Gold
+//   secondaryColor #4F5D75 — Deep Slate Blue (page background)
 
 import { prisma } from '@/lib/prisma';
 import type { ResolvedTheme } from '@/types/v2';
@@ -14,10 +13,10 @@ import type { ResolvedTheme } from '@/types/v2';
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 export const MEMORIAM_DEFAULTS: ResolvedTheme = {
-  brandName:        'Memoriam',
+  brandName:        'Absolute Posterity',
   logoUrl:          null,
-  primaryColor:     '#c9a96e',
-  secondaryColor:   '#0a0a16',
+  primaryColor:     '#CDBA93',
+  secondaryColor:   '#4F5D75',
   supportEmail:     null,
   poweredByEnabled: true,
   isWhiteLabel:     false,

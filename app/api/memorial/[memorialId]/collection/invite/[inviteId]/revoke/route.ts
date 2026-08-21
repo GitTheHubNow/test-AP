@@ -17,25 +17,27 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function PATCH(
   _request: NextRequest,
-  { params }: { params: { memorialId: string; inviteId: string } }
+  { params }: { params: Promise<{ memorialId: string; inviteId: string }> }
 ) {
+  const { memorialId, inviteId } = await params;
+
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
 
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const invite = await prisma.collectionInvite.findUnique({
-    where:  { id: params.inviteId },
+    where:  { id: inviteId },
     select: { id: true, memorialId: true, status: true },
   });
 
-  if (!invite || invite.memorialId !== params.memorialId) {
+  if (!invite || invite.memorialId !== memorialId) {
     return NextResponse.json({ success: false, error: 'Invite not found' }, { status: 404 });
   }
 
@@ -60,7 +62,7 @@ export async function PATCH(
         actorId:    userId,
         actorRole:  ActorRole.OWNER,
         reasonCode: ReasonCode.REVOCATION,
-        metadata:   { memorialId: params.memorialId },
+        metadata:   { memorialId: memorialId },
       },
     });
   });

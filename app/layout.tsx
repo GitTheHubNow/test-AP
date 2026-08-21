@@ -2,7 +2,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 
 export const metadata = {
-  title: 'Memoriam — Digital Memorial Platform',
+  title: 'Absolute Posterity — Digital Memorial Platform',
   description: 'A dignified place to honour and remember',
 };
 

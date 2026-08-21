@@ -25,6 +25,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
 const DEFAULT_PLAN = 'STARTER';
 
@@ -59,25 +60,21 @@ export default function OnboardingPaymentPage() {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#0a0a16', fontFamily: 'Georgia, serif',
+      minHeight: '100vh', background: '#4f5d75', fontFamily: 'Georgia, serif',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
       <div style={{ width: '100%', maxWidth: 460 }}>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem', justifyContent: 'center' }}>
-          <StepDot />
-          <StepLine />
-          <StepDot active />
-        </div>
+        <OnboardingSteps current={2} />
 
         <div style={{
-          background: '#0d0c1e', border: '1px solid #1e1e38', borderRadius: 14,
+          background: '#3f4c61', border: '1px solid #5c6a80', borderRadius: 14,
           padding: '2.5rem 2.25rem',
         }}>
-          <p style={{ margin: '0 0 0.4rem', fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: '#c9a96e' }}>
+          <p style={{ margin: '0 0 0.4rem', fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: '#cdba93' }}>
             Step 2 of 2
           </p>
-          <h1 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 300, color: '#f5f0e8' }}>
+          <h1 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 300, color: '#f4f1ea' }}>
             Add a payment method
           </h1>
           <p style={{ margin: '0 0 1.75rem', fontSize: '0.85rem', color: '#8a8aaa', lineHeight: 1.5 }}>
@@ -99,15 +96,15 @@ export default function OnboardingPaymentPage() {
               padding: '0.8rem', borderRadius: 8,
               background: isSubmitting ? 'rgba(201,169,110,0.2)' : 'rgba(201,169,110,0.15)',
               border: '1px solid rgba(201,169,110,0.4)',
-              color: '#c9a96e', fontFamily: 'Georgia, serif', fontSize: '0.9rem',
+              color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '0.9rem',
               letterSpacing: '0.03em', cursor: isSubmitting ? 'default' : 'pointer',
             }}
           >
             {isSubmitting ? 'Redirecting…' : 'Continue to secure checkout'}
           </button>
 
-          <p style={{ margin: '1rem 0 0', fontSize: '0.7rem', color: '#5a5870', textAlign: 'center' }}>
-            Handled securely by Stripe. Memoriam never sees your card details.
+          <p style={{ margin: '1rem 0 0', fontSize: '0.7rem', color: '#8290a3', textAlign: 'center' }}>
+            Handled securely by Stripe. Absolute Posterity never sees your card details.
           </p>
         </div>
       </div>
@@ -115,15 +112,3 @@ export default function OnboardingPaymentPage() {
   );
 }
 
-function StepDot({ active = false }: { active?: boolean }) {
-  return (
-    <div style={{
-      width: 8, height: 8, borderRadius: '50%',
-      background: active ? '#c9a96e' : '#2a2a4a',
-    }} />
-  );
-}
-
-function StepLine() {
-  return <div style={{ width: 28, height: 1, background: '#2a2a4a' }} />;
-}

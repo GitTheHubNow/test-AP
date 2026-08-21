@@ -8,8 +8,10 @@ import { handleAuthError } from '@/lib/errors';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { memorialId: string } }
+  { params }: { params: Promise<{ memorialId: string }> }
 ) {
+  const { memorialId } = await params;
+
   const { userId } = await auth();
 
   if (!userId) {
@@ -22,13 +24,13 @@ export async function POST(
   // Org-scoped edit access — previously a manual ownerId check that
   // blocked org staff.
   try {
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
   } catch (err) {
     return handleAuthError(err);
   }
 
   const memorial = await prisma.memorial.findUnique({
-    where: { id: params.memorialId },
+    where: { id: memorialId },
     select: { sealed: true },
   });
 
@@ -47,7 +49,7 @@ export async function POST(
   }
 
   try {
-    await sealMemorial(params.memorialId, userId, ActorRole.FUNERAL_HOME);
+    await sealMemorial(memorialId, userId, ActorRole.FUNERAL_HOME);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

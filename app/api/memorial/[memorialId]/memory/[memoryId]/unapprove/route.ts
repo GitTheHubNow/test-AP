@@ -17,22 +17,24 @@ import { handleAuthError } from '@/lib/errors';
  */
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { memorialId: string; memoryId: string } }
+  { params }: { params: Promise<{ memorialId: string; memoryId: string }> }
 ) {
+  const { memorialId, memoryId } = await params;
+
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    await assertMemorialAccess(params.memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit');
 
     const memory = await prisma.memory.findUnique({
-      where: { id: params.memoryId },
+      where: { id: memoryId },
       select: { id: true, memorialId: true, status: true },
     });
 
-    if (!memory || memory.memorialId !== params.memorialId) {
+    if (!memory || memory.memorialId !== memorialId) {
       return NextResponse.json({ success: false, error: 'Memory not found' }, { status: 404 });
     }
 
@@ -44,7 +46,7 @@ export async function POST(
     }
 
     await prisma.memory.update({
-      where: { id: params.memoryId },
+      where: { id: memoryId },
       data: { status: MemoryStatus.PENDING },
     });
 

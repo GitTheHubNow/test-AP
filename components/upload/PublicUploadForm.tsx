@@ -109,13 +109,13 @@ export function PublicUploadForm({ token, memorialId }: Props) {
         <h2 style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', fontSize: '1.5rem', fontWeight: 400, color: '#1a1714', marginBottom: '0.5rem' }}>
           Thank you
         </h2>
-        <p style={{ fontFamily: 'Georgia, serif', fontSize: '0.9rem', color: '#8a8a9a', lineHeight: 1.7, marginBottom: '1.5rem' }}>
+        <p style={{ fontFamily: 'Georgia, serif', fontSize: '0.9rem', color: '#98a2b3', lineHeight: 1.7, marginBottom: '1.5rem' }}>
           {successCount} photo{successCount !== 1 ? 's' : ''} uploaded successfully.
           They'll appear on the memorial after review.
         </p>
         <button
           onClick={() => { setDone(false); setSuccessCount(0); }}
-          style={{ fontSize: '0.85rem', padding: '0.55rem 1.25rem', borderRadius: 8, border: '1px solid #c9a96e', background: 'transparent', color: '#c9a96e', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+          style={{ fontSize: '0.85rem', padding: '0.55rem 1.25rem', borderRadius: 8, border: '1px solid #cdba93', background: 'transparent', color: '#cdba93', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
           Upload more photos
         </button>
       </div>
@@ -161,7 +161,7 @@ export function PublicUploadForm({ token, memorialId }: Props) {
         <div
           onClick={() => !uploading && fileInputRef.current?.click()}
           style={{
-            border: `2px dashed ${files.length > 0 ? '#c9a96e' : '#d1ccc5'}`, borderRadius: 10,
+            border: `2px dashed ${files.length > 0 ? '#cdba93' : '#d1ccc5'}`, borderRadius: 10,
             padding: '2rem 1rem', textAlign: 'center', cursor: uploading ? 'not-allowed' : 'pointer',
             background: files.length > 0 ? '#fffdf7' : '#fdfcfb', transition: 'all 0.15s',
           }}>
@@ -204,9 +204,9 @@ export function PublicUploadForm({ token, memorialId }: Props) {
       {uploading && (
         <div>
           <div style={{ height: 6, background: '#ede8e0', borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progress}%`, background: '#c9a96e', borderRadius: 999, transition: 'width 0.3s' }} />
+            <div style={{ height: '100%', width: `${progress}%`, background: '#cdba93', borderRadius: 999, transition: 'width 0.3s' }} />
           </div>
-          <p style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#8a8a9a', fontFamily: 'Georgia, serif', textAlign: 'center' }}>
+          <p style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#98a2b3', fontFamily: 'Georgia, serif', textAlign: 'center' }}>
             Uploading… {progress}%
           </p>
         </div>
@@ -225,8 +225,8 @@ export function PublicUploadForm({ token, memorialId }: Props) {
         disabled={uploading || files.length === 0}
         style={{
           width: '100%', padding: '0.9rem', borderRadius: 10, border: 'none',
-          background: uploading || files.length === 0 ? '#c9c2b8' : '#1a1a2e',
-          color: '#f5f0e8', fontSize: '0.95rem', fontWeight: 600,
+          background: uploading || files.length === 0 ? '#c9c2b8' : '#4f5d75',
+          color: '#f4f1ea', fontSize: '0.95rem', fontWeight: 600,
           fontFamily: 'Georgia, serif', cursor: uploading || files.length === 0 ? 'not-allowed' : 'pointer',
           transition: 'background 0.15s',
         }}>
