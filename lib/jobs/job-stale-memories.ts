@@ -95,7 +95,8 @@ export async function runStaleMemoriesJob(): Promise<{
 
   for (const [memorialId, { title, ownerId, count }] of byMemorial) {
     try {
-      const user = await clerkClient().users.getUser(ownerId);
+      const clerk = await clerkClient();
+      const user = await clerk.users.getUser(ownerId);
       const ownerEmail = user.emailAddresses?.[0]?.emailAddress;
 
       if (!ownerEmail) continue;

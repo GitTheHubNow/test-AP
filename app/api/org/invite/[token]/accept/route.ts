@@ -92,9 +92,10 @@ async function acceptInvite(token: string, userId: string) {
   // obtains the token (a forwarded email, a leaked link) could join the
   // org as whatever role the invite grants, regardless of who it was
   // actually meant for.
-  const clerkUser = await clerkClient().users.getUser(userId);
+  const clerk = await clerkClient();
+  const clerkUser = await clerk.users.getUser(userId);
   const userEmail = clerkUser.emailAddresses
-    ?.find(e => e.id === clerkUser.primaryEmailAddressId)
+    ?.find((e: { id: string }) => e.id === clerkUser.primaryEmailAddressId)
     ?.emailAddress?.toLowerCase()
     ?? clerkUser.emailAddresses?.[0]?.emailAddress?.toLowerCase();
 

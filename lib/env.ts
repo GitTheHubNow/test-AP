@@ -32,11 +32,18 @@ const EnvSchema = z.object({
   // Stripe — billing/checkout will fail at request-time without these;
   // catching it at boot instead of on a live user's first checkout
   // attempt is the whole point of this file existing.
+  //
+  // $99/mo base fee + $199/memorial metered usage — see lib/stripe.ts
+  // for the full pricing model writeup. Was STRIPE_STARTER_PRICE_ID /
+  // STRIPE_PROFESSIONAL_PRICE_ID / STRIPE_ENTERPRISE_PRICE_ID (3-tier
+  // model) — stripe.ts was updated when the pricing model changed, but
+  // this schema was missed, so the app failed to boot at all (env
+  // validation ran before any checkout code, demanding vars that no
+  // longer exist anywhere else in the codebase).
   STRIPE_SECRET_KEY: z.string().min(1).startsWith('sk_'),
   STRIPE_WEBHOOK_SECRET: z.string().min(1).startsWith('whsec_'),
-  STRIPE_STARTER_PRICE_ID: z.string().min(1).startsWith('price_'),
-  STRIPE_PROFESSIONAL_PRICE_ID: z.string().min(1).startsWith('price_'),
-  STRIPE_ENTERPRISE_PRICE_ID: z.string().min(1).startsWith('price_'),
+  STRIPE_BASE_PRICE_ID: z.string().min(1).startsWith('price_'),
+  STRIPE_MEMORIAL_PRICE_ID: z.string().min(1).startsWith('price_'),
 
   // Email
   RESEND_API_KEY: z.string().min(1),

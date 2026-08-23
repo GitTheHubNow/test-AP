@@ -84,15 +84,17 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Invalid status' }, { status: 400 });
     }
 
-    if (newStatus === CollectionItemStatus.REJECTED && !body.rejectionReason) {
-      return NextResponse.json({ success: false, error: 'rejectionReason required when rejecting' }, { status: 400 });
-    }
+    // rejectionReason is optional — the UI's own label says so
+    // ("Reason for rejection (optional)"), but this route used to
+    // require it anyway, so every reject click with an empty reason
+    // field 400'd. Fixed to match what the UI actually promises: only
+    // store a reason if one was actually provided.
 
     update.status     = newStatus;
     update.reviewedBy = userId;
     update.reviewedAt = new Date();
 
-    if (newStatus === CollectionItemStatus.REJECTED) {
+    if (newStatus === CollectionItemStatus.REJECTED && body.rejectionReason) {
       update.rejectionReason = (body.rejectionReason as string).trim();
     }
 

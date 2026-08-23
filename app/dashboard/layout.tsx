@@ -156,7 +156,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {/* User button */}
         <div className="sidebar-footer">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
+            <UserButton appearance={{ elements: { avatarBox: 'w-8 h-8' } }} />
             <span style={{ fontSize: '0.72rem', color: 'var(--ash)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
               Account
             </span>

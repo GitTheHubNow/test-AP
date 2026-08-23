@@ -49,7 +49,8 @@ export async function runExpiryEnforceJob(): Promise<{
 
       // Notify owner
       try {
-        const user = await clerkClient().users.getUser(memorial.ownerId);
+        const clerk = await clerkClient();
+        const user = await clerk.users.getUser(memorial.ownerId);
         const ownerEmail = user.emailAddresses?.[0]?.emailAddress;
 
         if (ownerEmail) {

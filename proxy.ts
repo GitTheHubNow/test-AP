@@ -1,7 +1,24 @@
 /**
- * middleware.ts
+ * proxy.ts
  *
  * Route protection via Clerk.
+ *
+ * RENAMED from middleware.ts (Next.js 16 — the "middleware" file
+ * convention is deprecated in favour of "proxy", same location
+ * (project root, next to app/), same behaviour. Only the filename and
+ * the exported function name changed: middleware() -> proxy(). The
+ * Clerk API calls — UPDATED for @clerk/nextjs v7 (Core 3): auth().protect()
+ * is now `await auth.protect()` (no parens on auth itself; auth is used
+ * directly rather than called then destructured). This is a real,
+ * documented Core 3 breaking change, not a stylistic edit — see
+ * https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-3
+ *
+ * Note for later: Next.js 16 also moved this file's default runtime
+ * from Edge to Node.js, and several sources recommend moving auth
+ * logic further down the stack (layouts/route handlers) rather than
+ * relying on this file as the only security layer — this app already
+ * does that correctly (every protected API route also calls auth()
+ * internally; see the V1-comment below), so no change needed there.
  *
  * CHANGE from V1:
  *   Added '/api/memorials(.*)' to isProtectedRoute.
@@ -20,7 +37,7 @@
  *   protected, including POST /api/org/invite/[token]/accept, which
  *   legitimately requires auth() — accepting an invite only makes sense
  *   once signed in. isPublicInviteInfo is checked BEFORE isProtectedRoute
- *   and short-circuits past the auth().protect() call for that one exact
+ *   and short-circuits past the auth.protect() call for that one exact
  *   route shape only.
  *
  * CHANGE (Part D — guided onboarding):
@@ -71,7 +88,7 @@ export default clerkMiddleware(async (auth, req) => {
     return;
   }
   if (isProtectedRoute(req)) {
-    auth().protect();
+    await auth.protect();
   }
 });
 

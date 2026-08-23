@@ -104,10 +104,10 @@ export default function SignUpPage() {
             appearance={{
               variables: {
                 colorPrimary: '#4f5d75',
-                colorText: '#4f5d75',
+                colorForeground: '#4f5d75',
                 colorBackground: '#fdfcfa',
-                colorInputBackground: '#f4f1ea',
-                colorInputText: '#4f5d75',
+                colorInput: '#f4f1ea',
+                colorInputForeground: '#4f5d75',
                 fontFamily: "'Lora', Georgia, serif",
                 borderRadius: '8px',
               },

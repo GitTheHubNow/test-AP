@@ -69,7 +69,8 @@ export async function runSendAfterDaysJob(): Promise<{
       // Get owner name for email personalisation
       let ownerName: string | undefined;
       try {
-        const user = await clerkClient().users.getUser(memorial.ownerId);
+        const clerk = await clerkClient();
+        const user = await clerk.users.getUser(memorial.ownerId);
         ownerName = user.firstName ?? user.emailAddresses?.[0]?.emailAddress;
       } catch (error) {
         // Non-blocking — email still sends without owner name. This runs

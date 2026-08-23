@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { SignInButton, SignedIn, SignedOut, useUser } from '@clerk/nextjs';
+import { SignInButton, Show, useUser } from '@clerk/nextjs';
 
 interface Props {
   token:             string;
@@ -78,7 +78,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
 
       <div style={cardStyle}>
 
-        <SignedOut>
+        <Show when="signed-out">
           <p style={{ fontSize: '0.85rem', color: '#374151', fontFamily: 'Georgia, serif', lineHeight: 1.7, marginBottom: '1.25rem' }}>
             You need to sign in or create a free account to accept ownership.
             Your account will be linked to this memorial permanently.
@@ -93,9 +93,9 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
               Sign In or Create Account
             </button>
           </SignInButton>
-        </SignedOut>
+        </Show>
 
-        <SignedIn>
+        <Show when="signed-in">
           <p style={{ fontSize: '0.82rem', color: '#6B7280', fontFamily: 'Georgia, serif', marginBottom: '1rem' }}>
             Signed in as <strong style={{ color: '#1a1714' }}>{user?.primaryEmailAddress?.emailAddress}</strong>
           </p>
@@ -123,7 +123,7 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
           >
             {accepting ? 'Transferring ownership…' : 'Accept Ownership →'}
           </button>
-        </SignedIn>
+        </Show>
       </div>
     </div>
   );

@@ -138,7 +138,8 @@ export async function runPublishPromptJob(): Promise<{ processed: number; sent: 
       let ownerEmail: string | undefined;
       let ownerName:  string | undefined;
       try {
-        const user = await clerkClient().users.getUser(memorial.ownerId);
+        const clerk = await clerkClient();
+        const user = await clerk.users.getUser(memorial.ownerId);
         ownerEmail = user.emailAddresses?.[0]?.emailAddress;
         ownerName  = user.firstName ?? undefined;
       } catch (err) {
