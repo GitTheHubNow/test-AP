@@ -56,6 +56,15 @@ const EnvSchema = z.object({
   // silently never authenticates.
   CRON_SECRET: z.string().min(16, 'CRON_SECRET should be a long random string, not a short/guessable value'),
 
+  // Signs the family self-service access cookie (lib/familyAccess.ts).
+  // Hard-required, like CRON_SECRET above, not soft-optional like
+  // IP_HASH_SALT below — there is no safe fallback if this is unset;
+  // the whole family-access feature simply throws at first use rather
+  // than degrading. A dedicated secret, deliberately not reused from
+  // CRON_SECRET or IP_HASH_SALT — rotating one for a real reason
+  // (a suspected leak) should never silently affect the other two.
+  FAMILY_SESSION_SECRET: z.string().min(16, 'FAMILY_SESSION_SECRET should be a long random string, not a short/guessable value'),
+
   // Abuse-tracking salt — has a hardcoded fallback in code
   // ('memoriam-salt') if unset, which defeats the point of salting.
   // Not making this hard-required (won't crash boot over it, since the

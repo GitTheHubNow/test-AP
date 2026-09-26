@@ -27,6 +27,8 @@ interface Handover {
   acceptTokenExpiresAt: string | null;
   notificationSentAt:   string | null;
   createdAt:            string;
+  familyAccessToken:    string | null;
+  familyAccessEnabled:  boolean;
 }
 
 interface Props {
@@ -215,8 +217,32 @@ function HandoverConfigured({ memorialId, handover, onCancel, onCopy }: {
   onCancel:   () => void;
   onCopy:     (url: string) => void;
 }) {
+  const router = useRouter();
   const [cancelling, setCancelling] = useState(false);
   const [copied,     setCopied]     = useState(false);
+  const [grantingAccess, setGrantingAccess] = useState(false);
+  const [accessMsg,      setAccessMsg]      = useState<string | null>(null);
+  const [completingHandover, setCompletingHandover] = useState(false);
+  const [completeMsg,        setCompleteMsg]        = useState<string | null>(null);
+
+  async function handleCompleteNoClerk() {
+    if (!confirm(`Complete this handover now? ${handover.familyContactName} will get an email with a link and QR code — no account needed on their end.`)) return;
+    setCompletingHandover(true);
+    setCompleteMsg(null);
+    try {
+      const res = await fetch(`/api/memorial/${memorialId}/handover/complete`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setCompleteMsg(data.data?.warning ?? `Done — access card sent to ${handover.familyContactEmail}.`);
+        router.refresh();
+      } else {
+        setCompleteMsg(data.error ?? 'Failed to complete handover.');
+      }
+    } catch {
+      setCompleteMsg('Failed to complete handover. Please check your connection and try again.');
+    }
+    setCompletingHandover(false);
+  }
 
   async function handleCancel() {
     if (!confirm('Cancel this handover? The family accept link will stop working.')) return;
@@ -224,6 +250,21 @@ function HandoverConfigured({ memorialId, handover, onCancel, onCopy }: {
     const res = await fetch(`/api/memorial/${memorialId}/handover`, { method: 'DELETE' });
     if (res.ok) onCancel();
     setCancelling(false);
+  }
+
+  async function handleGrantFamilyAccess() {
+    setGrantingAccess(true);
+    setAccessMsg(null);
+    try {
+      const res = await fetch(`/api/memorial/${memorialId}/handover/family-access`, { method: 'POST' });
+      const data = await res.json();
+      setAccessMsg(data.success
+        ? `Sent to ${handover.familyContactEmail}.`
+        : (data.error ?? 'Failed to send.'));
+    } catch {
+      setAccessMsg('Failed to send. Please check your connection and try again.');
+    }
+    setGrantingAccess(false);
   }
 
   function handleCopy() {
@@ -257,7 +298,41 @@ function HandoverConfigured({ memorialId, handover, onCancel, onCopy }: {
         ))}
       </div>
 
-      {/* Accept link */}
+      {/* ADDED — primary completion path: no Clerk account for the
+          family, ever. The accept-link block below is the older,
+          Clerk-based alternative — kept working, not removed, but no
+          longer the primary recommended action. */}
+      {isActive && (
+        <div style={{ background: 'var(--ivory)', borderRadius: 8, padding: '1rem', border: '2px solid var(--gold)' }}>
+          <p style={{ margin: '0 0 0.4rem', fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--gold)', fontFamily: 'var(--font-body)' }}>
+            Recommended
+          </p>
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--ink)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
+            Hand this memorial over directly — the family gets an email with a simple
+            link and a QR code for their card. No account or password needed on their end.
+          </p>
+          <button
+            onClick={handleCompleteNoClerk}
+            disabled={completingHandover}
+            style={{
+              fontSize: '0.85rem', padding: '0.6rem 1.25rem', borderRadius: 6,
+              border: 'none', background: 'var(--gold)', color: 'var(--ink)',
+              fontWeight: 600, cursor: completingHandover ? 'default' : 'pointer',
+              fontFamily: 'var(--font-body)',
+            }}
+          >
+            {completingHandover ? 'Completing…' : 'Complete Handover & Send Access Card'}
+          </button>
+          {completeMsg && (
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--ink-light)', fontFamily: 'var(--font-body)' }}>
+              {completeMsg}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Accept link — older, Clerk-based alternative. Still works, but
+          requires the family member to create/use a Clerk account. */}
       {isActive && handover.acceptUrl && (
         <div style={{ background: 'var(--ivory)', borderRadius: 8, padding: '1rem', border: '1px solid var(--ivory-mid)' }}>
           <p style={{ margin: '0 0 0.5rem', fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ash)', fontFamily: 'var(--font-body)' }}>
@@ -287,6 +362,41 @@ function HandoverConfigured({ memorialId, handover, onCancel, onCopy }: {
           <p style={{ margin: '0.3rem 0 0', fontSize: '0.82rem', color: '#065F46', fontFamily: 'var(--font-body)' }}>
             The family now has full ownership of this memorial. Your access to manage it has ended.
           </p>
+
+          {/* ADDED — family self-service access status + resend.
+              A token is generated automatically the moment handover
+              completes (see app/api/handover/accept/[token]/route.ts),
+              so this is a resend/regenerate control for the common case
+              — the family lost their card or never got the email — not
+              the only way to grant access in the first place. */}
+          <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #6EE7B7' }}>
+            {handover.familyAccessEnabled ? (
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.82rem', color: '#065F46', fontFamily: 'var(--font-body)' }}>
+                Family self-service access is active — they can hide comments, hide the memorial,
+                and edit basic details without an account.
+              </p>
+            ) : (
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.82rem', color: '#065F46', fontFamily: 'var(--font-body)' }}>
+                Family self-service access has not been granted yet.
+              </p>
+            )}
+            <button
+              onClick={handleGrantFamilyAccess}
+              disabled={grantingAccess}
+              style={{
+                fontSize: '0.78rem', padding: '0.4rem 1rem', borderRadius: 6,
+                border: '1px solid #6EE7B7', background: 'transparent', color: '#065F46',
+                cursor: grantingAccess ? 'default' : 'pointer', fontFamily: 'var(--font-body)',
+              }}
+            >
+              {grantingAccess ? 'Sending…' : handover.familyAccessEnabled ? 'Resend Access Card' : 'Send Family Access Card'}
+            </button>
+            {accessMsg && (
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.78rem', color: '#065F46', fontFamily: 'var(--font-body)' }}>
+                {accessMsg}
+              </p>
+            )}
+          </div>
         </div>
       )}
 

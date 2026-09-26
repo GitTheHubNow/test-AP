@@ -285,3 +285,45 @@ export function renderPublishPromptEmail({
     ${small('This is an automated reminder based on the service date on file. No action is required if the memorial is already published.')}
   `);
 }
+
+// ── Template: Payment failed — sent to org owner ────────────────────────────
+//
+// Triggered from app/api/billing/webhook/route.ts on invoice.payment_failed.
+// This is the one email type that is hard-forced on in lib/email/policy.ts —
+// an org cannot opt out of being told their card was declined, since the
+// consequence (blocked from creating new memorials) has no other warning.
+
+export interface PaymentFailedEmailParams {
+  orgName:     string;
+  billingUrl:  string;
+  amountDue?:  string; // pre-formatted, e.g. "$298.00 AUD" — formatting stays in the caller
+  retryDate?:  string; // pre-formatted date string — Stripe's next retry attempt, if any
+}
+
+export function renderPaymentFailedEmail({
+  orgName,
+  billingUrl,
+  amountDue,
+  retryDate,
+}: PaymentFailedEmailParams): string {
+  orgName    = escapeHtml(orgName);
+  billingUrl = escapeHtml(billingUrl);
+
+  const amountLine = amountDue
+    ? `We attempted to charge <strong>${escapeHtml(amountDue)}</strong> and the payment was declined.`
+    : 'Your most recent payment was declined.';
+
+  const retryLine = retryDate
+    ? `Stripe will automatically retry the charge on <strong>${escapeHtml(retryDate)}</strong>. You don\u2019t need to do anything if you\u2019d like to wait for that.`
+    : 'You can update your payment details at any time to retry the charge immediately.';
+
+  return base(`
+    ${h1(`Payment failed — ${orgName}`)}
+    ${subheading('Action needed to keep creating new memorials')}
+    ${body(`${amountLine} Until this is resolved, your account can\u2019t create new memorials or pet aftercare cases.`)}
+    ${body(retryLine)}
+    ${cta(billingUrl, 'Update Payment Details →')}
+    ${divider()}
+    ${small('This does not affect any memorial you\u2019ve already published — those remain online and accessible to families and visitors regardless of billing status.')}
+  `);
+}

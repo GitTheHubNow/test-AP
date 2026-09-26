@@ -15,6 +15,8 @@
 
 import { sendEmailAsync, getAppUrl, getModerationUrl, getMemorialUrl } from '@/lib/email';
 import { shouldSend, recordBatchSent, getOrgIdForMemorial } from '@/lib/email/policy';
+import { prisma } from '@/lib/prisma';
+import { clerkClient } from '@clerk/nextjs/server';
 import { renderNewMemoryEmail }       from '@/lib/email-templates/new-memory-email';
 import { renderWelcomeEmail }         from '@/lib/email-templates/welcome-email';
 import { renderStalePendingEmail }    from '@/lib/email-templates/automation-emails';
@@ -22,10 +24,12 @@ import { renderExpiryWarningEmail }   from '@/lib/email-templates/automation-ema
 import { renderMemorialSuspendedEmail } from '@/lib/email-templates/automation-emails';
 import { renderLastChanceUploadEmail } from '@/lib/email-templates/automation-emails';
 import { renderPublishPromptEmail }    from '@/lib/email-templates/automation-emails';
+import { renderPaymentFailedEmail }    from '@/lib/email-templates/automation-emails';
 import {
   renderHandoverInitiatedEmail,
   renderHandoverAcceptedFHEmail,
   renderHandoverAcceptedFamEmail,
+  renderFamilyAccessGrantedEmail,
 } from '@/lib/email-templates/handover';
 
 const APP_URL = getAppUrl();
@@ -358,4 +362,93 @@ export async function sendPublishPrompt(params: {
   });
 
   if (orgId) recordBatchSent(orgId, 'PUBLISH_PROMPT', params.memorialId);
+}
+
+// ── Family access granted → family ────────────────────────────────────────
+//
+// Called once, when staff generates a memorial's family-access
+// token/QR (see app/api/memorial/[memorialId]/handover/family-access/route.ts).
+// FAMILY_ACCESS_GRANTED is hard-forced on in lib/email/policy.ts — this
+// email IS the delivery mechanism for the family's access link, not a
+// secondary notification.
+
+export async function sendFamilyAccessGranted(params: {
+  familyEmail:       string;
+  familyContactName: string;
+  memorialId:        string;
+  memorialTitle:     string;
+  familyAccessToken: string;
+}): Promise<void> {
+  const orgId = await getOrgIdForMemorial(params.memorialId);
+  if (!await shouldSend(orgId, 'FAMILY_ACCESS_GRANTED')) return;
+
+  const familyAccessUrl = `${APP_URL}/family/${params.familyAccessToken}`;
+
+  sendEmailAsync({
+    to:      params.familyEmail,
+    subject: `Manage ${params.memorialTitle}'s memorial`,
+    html:    renderFamilyAccessGrantedEmail({
+      memorialTitle:     params.memorialTitle,
+      familyContactName: params.familyContactName,
+      familyAccessUrl,
+    }),
+  });
+}
+
+// ── Payment failed — sent to every OWNER-role member of the org ────────────
+//
+// Called from app/api/billing/webhook/route.ts's handlePaymentFailed().
+// Unlike most senders above, this is keyed by orgId directly rather than
+// memorialId — billing lives on Organisation, not an individual memorial.
+// Organisation has no email field of its own (it's Clerk-backed via
+// clerkOrgId), so every OrgMember with role OWNER is resolved and their
+// email looked up through Clerk. Sent to every owner, not just one —
+// better to over-notify a billing failure than have it land on a single
+// inbox nobody checks.
+
+export async function sendPaymentFailedEmail(params: {
+  orgId:      string;
+  orgName:    string;
+  amountDue?: string; // pre-formatted, e.g. "$298.00 AUD"
+  retryDate?: string; // pre-formatted, e.g. "18 September 2026"
+}): Promise<void> {
+  // PAYMENT_FAILED is hard-forced on in shouldSend() — this call exists
+  // for consistency with every other sender, not because it can suppress.
+  if (!await shouldSend(params.orgId, 'PAYMENT_FAILED')) return;
+
+  const owners = await prisma.orgMember.findMany({
+    where:  { organisationId: params.orgId, role: 'OWNER' },
+    select: { userId: true },
+  });
+
+  if (owners.length === 0) {
+    console.error(`sendPaymentFailedEmail: org ${params.orgId} has no OWNER-role member`);
+    return;
+  }
+
+  const billingUrl = `${APP_URL}/dashboard/billing`;
+  const html = renderPaymentFailedEmail({
+    orgName:    params.orgName,
+    billingUrl,
+    amountDue:  params.amountDue,
+    retryDate:  params.retryDate,
+  });
+
+  const clerk = await clerkClient();
+
+  for (const owner of owners) {
+    try {
+      const user = await clerk.users.getUser(owner.userId);
+      const email = user.emailAddresses?.[0]?.emailAddress;
+      if (!email) continue;
+
+      sendEmailAsync({
+        to:      email,
+        subject: `Action needed: payment failed for ${params.orgName}`,
+        html,
+      });
+    } catch (error) {
+      console.error(`sendPaymentFailedEmail: failed to notify owner ${owner.userId}`, error);
+    }
+  }
 }

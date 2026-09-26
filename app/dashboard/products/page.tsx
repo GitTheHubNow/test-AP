@@ -12,6 +12,7 @@ import { auth }           from '@clerk/nextjs/server';
 import { prisma }         from '@/lib/prisma';
 import { getOrgIdForUser } from '@/lib/tenant';
 import { OrgProductQueue } from '@/components/products/OrgProductQueue';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,18 @@ export default async function OrgProductsPage() {
               firstName:     true,
               lastName:      true,
               preferredName: true,
+              nominatedName:  true,
+              nominatedEmail: true,
+              funeralDate:    true,
+              venueName:      true,
+              venueAddress:   true,
+              funeralCase: {
+                select: {
+                  deceasedName: true, serviceDate: true,
+                  familyContact: true, contactEmail: true,
+                  venueName: true, venueAddress: true,
+                },
+              },
             },
           },
         },
@@ -67,15 +80,18 @@ export default async function OrgProductsPage() {
     : [];
 
   // Attach displayName
-  const formatted = initialRequests.map(r => ({
-    ...r,
-    memorialName:
-      r.memorial.preferredName ||
-      [r.memorial.firstName, r.memorial.lastName].filter(Boolean).join(' ') ||
-      r.memorial.title ||
-      'Memorial',
-    memorial: undefined,
-  }));
+  const formatted = initialRequests.map(r => {
+    const resolved = resolveMemorialFields(r.memorial);
+    return {
+      ...r,
+      memorialName:
+        r.memorial.preferredName ||
+        [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
+        r.memorial.title ||
+        'Memorial',
+      memorial: undefined,
+    };
+  });
 
   return (
     <div style={styles.page}>

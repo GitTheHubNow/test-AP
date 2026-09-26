@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { format } from 'date-fns';
 import { verifyFileContent } from '@/lib/file-validation';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
 
 /**
  * POST /api/collect/[token]
@@ -104,6 +105,16 @@ export async function POST(
     const MAX = 50 * 1024 * 1024;
     if (file.size > MAX) {
       return NextResponse.json({ success: false, error: 'File too large (max 50MB)' }, { status: 400 });
+    }
+
+    // Cumulative per-memorial storage quota — checked before any of the
+    // expensive work below (buffer read, disk write), same reasoning as
+    // the per-file size cap ordering: reject cheaply before doing real
+    // I/O for an upload that's going to be rejected anyway.
+    try {
+      await assertStorageQuotaAvailable(invite.memorialId, file.size);
+    } catch (err: any) {
+      return NextResponse.json({ success: false, error: err.message }, { status: err.status ?? 413 });
     }
 
     const ALLOWED: Record<CollectionItemType, string[]> = {

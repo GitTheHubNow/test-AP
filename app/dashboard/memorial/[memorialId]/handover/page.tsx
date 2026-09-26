@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { HandoverWorkspace } from '@/components/handover/HandoverWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
@@ -29,6 +30,19 @@ export default async function HandoverPage({ params }: Props) {
       title:         true,
       workflowStage: true,
       funeralDate:   true,
+      firstName:      true,
+      lastName:       true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       handover: {
         select: {
           id:                   true,
@@ -44,12 +58,16 @@ export default async function HandoverPage({ params }: Props) {
           acceptTokenExpiresAt: true,
           notificationSentAt:   true,
           createdAt:            true,
+          familyAccessToken:    true,
+          familyAccessEnabled:  true,
         },
       },
     },
   });
 
   if (!memorial) notFound();
+
+  const resolved = resolveMemorialFields(memorial);
 
   const appUrl    = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const handover  = memorial.handover;
@@ -61,7 +79,7 @@ export default async function HandoverPage({ params }: Props) {
         id:            memorial.id,
         title:         memorial.title,
         workflowStage: memorial.workflowStage,
-        funeralDate:   memorial.funeralDate?.toISOString() ?? null,
+        funeralDate:   resolved.funeralDate?.toISOString() ?? null,
       }}
       handover={handover ? {
         id:                   handover.id,
@@ -77,6 +95,8 @@ export default async function HandoverPage({ params }: Props) {
         notificationSentAt:   handover.notificationSentAt?.toISOString()   ?? null,
         acceptUrl,
         createdAt:            handover.createdAt.toISOString(),
+        familyAccessToken:    handover.familyAccessToken,
+        familyAccessEnabled:  handover.familyAccessEnabled,
       } : null}
     />
   );

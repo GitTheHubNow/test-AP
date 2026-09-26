@@ -163,11 +163,28 @@ export async function PATCH(
       }
 
       // Audit log
+      //
+      // NOTE: this route is NOT migrated to lib/approvals.ts's
+      // recordApproval() like the other 3 approve/reject routes are —
+      // unlike those, a single PATCH here can simultaneously edit
+      // metadata, change status, AND auto-promote to a public Memory
+      // (+ Media) in one transaction with one combined audit event.
+      // Forcing that through a generic single-entity approval function
+      // would mean either losing the combined event or writing two
+      // separate audit events for what's really one logical action —
+      // worse, not better. The one real inconsistency here (this route
+      // used AuditAction.UPDATE for approve/reject, while every other
+      // route correctly used APPROVE/REJECT) is fixed directly below
+      // instead.
       await tx.auditEvent.create({
         data: {
           entityType: EntityType.COLLECTION_ITEM,
           entityId:   item.id,
-          action:     AuditAction.UPDATE,
+          action:     newStatus === CollectionItemStatus.APPROVED
+            ? AuditAction.APPROVE
+            : newStatus === CollectionItemStatus.REJECTED
+              ? AuditAction.REJECT
+              : AuditAction.UPDATE,
           actorId:    userId,
           actorRole:  ActorRole.OWNER,
           reasonCode: newStatus === CollectionItemStatus.APPROVED

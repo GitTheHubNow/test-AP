@@ -16,6 +16,7 @@ interface Memorial {
   deathDate:      string | null;
   workflowStage:  string;
   publishedAt:    string | null;
+  familyConsentConfirmed: boolean;
   primaryColor:   string;
   backgroundColor: string;
   showTimeline:   boolean;
@@ -58,6 +59,7 @@ interface Checklist {
   hasMemories:    boolean;
   hasMedia:       boolean;
   noUnsorted:     boolean;
+  hasConsent:     boolean;
 }
 
 interface Props {
@@ -89,6 +91,81 @@ function CheckItem({ label, passed, hint }: { label: string; passed: boolean; hi
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Family consent confirmation ───────────────────────────────────────────
+//
+// See app/api/memorial/[memorialId]/family-consent/route.ts — a
+// deliberate, separate attestation from publishing itself. Once
+// confirmed, this cannot be un-confirmed from the UI (the route itself
+// rejects attempts to set it back to false) — a factual record of "we
+// attested this on this date," not a toggle.
+
+function FamilyConsentConfirm({ memorialId, confirmed }: { memorialId: string; confirmed: boolean }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (confirmed) {
+    return (
+      <div style={{
+        marginTop: '0.5rem', padding: '0.6rem 0.75rem', borderRadius: 8,
+        background: '#D1FAE5', fontSize: '0.75rem', color: '#065F46', fontFamily: 'var(--font-body)',
+      }}>
+        ✓ Family consent to publish has been confirmed.
+      </div>
+    );
+  }
+
+  async function handleConfirm() {
+    if (!confirm('Confirm that you have the family\u2019s consent to publish this memorial? This will be recorded and cannot be undone from here.')) return;
+    setConfirming(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/memorial/${memorialId}/family-consent`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ confirmed: true }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        router.refresh();
+      } else {
+        setError(data.error ?? 'Failed to confirm.');
+      }
+    } catch {
+      setError('Failed to confirm. Please check your connection and try again.');
+    }
+    setConfirming(false);
+  }
+
+  return (
+    <div style={{
+      marginTop: '0.5rem', padding: '0.75rem', borderRadius: 8,
+      background: '#FEF3C7', border: '1px solid #FCD34D',
+    }}>
+      <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', color: '#92400E', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
+        Before this memorial can be published, confirm that you have the family's
+        (next-of-kin's) consent to publish this content publicly.
+      </p>
+      <button
+        onClick={handleConfirm}
+        disabled={confirming}
+        style={{
+          fontSize: '0.75rem', padding: '0.4rem 1rem', borderRadius: 6,
+          border: 'none', background: '#92400E', color: '#fff',
+          fontWeight: 600, cursor: confirming ? 'default' : 'pointer', fontFamily: 'var(--font-body)',
+        }}
+      >
+        {confirming ? 'Confirming…' : 'Confirm Family Consent'}
+      </button>
+      {error && (
+        <p style={{ margin: '0.5rem 0 0', fontSize: '0.72rem', color: '#92400E', fontFamily: 'var(--font-body)' }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -280,9 +357,12 @@ export function PreviewWorkspace({
             <CheckItem label="At least one memory"        passed={checklist.hasMemories}     hint="Approve a collection item or wait for public submissions" />
             <CheckItem label="At least one photo"         passed={checklist.hasMedia}        hint="Approve a photo in the Collection workspace" />
             <CheckItem label="No unsorted content"        passed={checklist.noUnsorted}      hint={`${collectionUnsorted} item${collectionUnsorted !== 1 ? 's' : ''} still unsorted`} />
+            <CheckItem label="Family consent confirmed"   passed={checklist.hasConsent}      hint="Required — see below" />
+
+            <FamilyConsentConfirm memorialId={memorial.id} confirmed={checklist.hasConsent} />
 
             <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--ivory)', borderRadius: 8, fontSize: '0.72rem', color: 'var(--ash)', fontFamily: 'var(--font-body)', lineHeight: 1.6 }}>
-              <strong>Minimum to publish:</strong> name + at least one memory.
+              <strong>Minimum to publish:</strong> name + at least one memory + family consent confirmed.
               All other items are recommended but optional.
             </div>
 

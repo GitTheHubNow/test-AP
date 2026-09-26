@@ -23,6 +23,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                     from '@/lib/prisma';
 import { stripe }                     from '@/lib/stripe';
 import type Stripe                    from 'stripe';
+import { sendPaymentFailedEmail }     from '@/lib/email/send';
+import { formatAmountDue, formatRetryDate } from '@/lib/billing/format';
 
 // Stripe requires the raw body for signature verification.
 // Next.js App Router provides it via req.text().
@@ -165,13 +167,27 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const orgId = await getOrgIdFromCustomer(invoice.customer as string);
   if (!orgId) return;
 
-  await prisma.organisation.update({
+  const org = await prisma.organisation.update({
     where: { id: orgId },
     data:  { subscriptionStatus: 'PAST_DUE' },
+    select: { name: true, brandName: true },
   });
 
-  // TODO: trigger email notification to org owner about payment failure
-  // await sendPaymentFailedEmail(orgId);
+  // amount_due is in the currency's smallest unit (cents for AUD) — see
+  // lib/billing/format.ts for why this is a separate, tested function
+  // rather than inline here.
+  const amountDue = formatAmountDue(invoice.amount_due, invoice.currency);
+
+  // Stripe schedules a retry automatically on standard dunning settings;
+  // next_payment_attempt is only present if one is actually scheduled.
+  const retryDate = formatRetryDate(invoice.next_payment_attempt);
+
+  await sendPaymentFailedEmail({
+    orgId,
+    orgName: org.brandName ?? org.name,
+    amountDue,
+    retryDate,
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

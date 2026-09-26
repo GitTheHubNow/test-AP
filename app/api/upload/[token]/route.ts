@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { saveUploadedFile } from '@/lib/storage-server';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { verifyFileContent } from '@/lib/file-validation';
+import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
 
 const MAX_FILES_PER_REQUEST = 1; // One at a time from the client
 const MAX_FILE_SIZE_BYTES   = 50 * 1024 * 1024; // 50MB
@@ -128,6 +129,16 @@ export async function POST(
   const contentCheck = verifyFileContent(buffer, isHeic ? 'image/heic' : file.type);
   if (!contentCheck.valid) {
     return NextResponse.json({ success: false, error: contentCheck.reason }, { status: 400 });
+  }
+
+  // Cumulative per-memorial storage quota — checked after the individual
+  // per-file size cap above, same ordering as the video upload route:
+  // reject obviously-too-big files cheaply first, then do the DB read
+  // needed for the cumulative check.
+  try {
+    await assertStorageQuotaAvailable(memorial.id, file.size);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: err.status ?? 413 });
   }
 
   try {

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { getPublicUrl } from '@/lib/upload-shared';
 import { ensurePublicToken } from '@/lib/qr';
 import { AppearanceEditor } from '@/components/memorial/AppearanceEditor';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 export default async function AppearancePage({ params }: { params: Promise<{ memorialId: string }> }) {
   const { memorialId } = await params;
@@ -22,6 +23,18 @@ export default async function AppearancePage({ params }: { params: Promise<{ mem
       heroImageKey: true,
       slug:         true,
       publicToken:  true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      funeralDate:    true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       collectionItems: {
         where:   { type: 'PHOTO', status: 'APPROVED', isHero: true },
         select:  { blobKey: true },
@@ -43,7 +56,10 @@ export default async function AppearancePage({ params }: { params: Promise<{ mem
   });
   if (!memorial) notFound();
 
-  const displayName = [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') || 'Memorial';
+  const displayName = (() => {
+    const { firstName, lastName } = resolveMemorialFields(memorial);
+    return [firstName, lastName].filter(Boolean).join(' ') || 'Memorial';
+  })();
 
   // publicToken is generated lazily (see app/api/memorials/[id]/qr/route.ts) —
   // generate it here too so "View live" is never a dead link from this editor.

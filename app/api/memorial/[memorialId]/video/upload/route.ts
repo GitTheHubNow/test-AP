@@ -10,6 +10,7 @@ import { saveUploadedFile }           from '@/lib/storage-server';
 import { assertMemorialAccess }       from '@/lib/tenant';
 // ────────────────────────────────────────────────────────────────────────────
 import { verifyFileContent }          from '@/lib/file-validation';
+import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
 
 // No explicit cap previously existed on this route. That mattered more
 // than usual here because saveUploadedFile() unconditionally does
@@ -77,6 +78,23 @@ export async function POST(
       );
     }
 
+    // Cumulative per-memorial storage quota (STORAGE_MB_PER_MEMORIAL) —
+    // this is the check that was explicitly flagged as not-yet-built in
+    // the comment above. A re-render replaces the existing video rather
+    // than adding a second one (see the upsert below), so this correctly
+    // does NOT double-count an existing video's current size against
+    // itself — getMemorialStorageUsage reads the OLD sizeBytes (pre-
+    // upsert), and we're checking whether the NEW file's size fits, which
+    // slightly over-rejects right at the boundary on a re-render (checks
+    // old-size + new-size instead of just new-size), but that's a safe
+    // direction to be wrong in for a quota, and avoids a more complex
+    // "subtract the row being replaced" query for a rare edge case.
+    try {
+      await assertStorageQuotaAvailable(memorialId, file.size);
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: err.status ?? 413 });
+    }
+
     // Magic-byte check — same fix applied to the collect/[token] and
     // staff collection routes. This route is reached after auth +
     // assertMemorialAccess, but as with the staff collection route,
@@ -109,12 +127,14 @@ const blobKey = await saveUploadedFile(
         memorialId:  memorialId,
         webBlobKey:  blobKey,
         hdBlobKey:   blobKey,
+        sizeBytes:   file.size,
         status:      'COMPLETE',
         renderedAt:  new Date(),
       },
       update: {
         webBlobKey: blobKey,
         hdBlobKey:  blobKey,
+        sizeBytes:  file.size,
         status:     'COMPLETE',
         renderedAt: new Date(),
       },

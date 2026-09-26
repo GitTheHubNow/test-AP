@@ -7,6 +7,7 @@ import { auth }       from '@clerk/nextjs/server';
 import { prisma }     from '@/lib/prisma';
 import { ensurePublicToken } from '@/lib/qr';
 import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   children: ReactNode;
@@ -37,10 +38,29 @@ export default async function MemorialLayout({ children, params }: Props) {
       id: true, firstName: true, lastName: true, serviceTime: true,
       slug: true, publicToken: true,
       funeralDate: true, tributeUnlockOverride: true,
+      // PRIORITY 3 FIX: funeralDate here doesn't just affect display —
+      // it feeds the lock/unlock gate below (isTributeUnlocked /
+      // daysUntilTributeUnlock) that decides whether staff can even
+      // access Photos/Video/Guest Book yet. A stale value on a
+      // case-linked memorial could lock staff out of (or into) those
+      // sections at the wrong time, not just show the wrong date.
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       organisation: { select: { featureProducts: true, featureSlideshow: true } },
     },
   });
   if (!memorial) notFound();
+
+  const resolved = resolveMemorialFields(memorial);
 
   // publicToken is generated lazily (see app/api/memorials/[id]/qr/route.ts) —
   // a memorial whose QR panel has never been opened will have publicToken: null.
@@ -51,14 +71,14 @@ export default async function MemorialLayout({ children, params }: Props) {
 
   const { unreviewedPhotos, pendingGuestBook } = await getBadgeCounts(memorialId);
   const id   = memorialId;
-  const name = [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') || 'Memorial';
+  const name = [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') || 'Memorial';
 
   const sectionsUnlocked = isTributeUnlocked({
-    funeralDate: memorial.funeralDate,
+    funeralDate: resolved.funeralDate,
     tributeUnlockOverride: memorial.tributeUnlockOverride,
   });
   const daysUntilUnlock = daysUntilTributeUnlock({
-    funeralDate: memorial.funeralDate,
+    funeralDate: resolved.funeralDate,
     tributeUnlockOverride: memorial.tributeUnlockOverride,
   });
   const unlockNote = daysUntilUnlock !== null

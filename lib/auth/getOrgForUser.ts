@@ -25,6 +25,7 @@ export interface OrgContext {
   featureSlideshow:    boolean;
   featureProducts:     boolean;
   featureCaseLite:     boolean;
+  featurePetAftercare: boolean;
   isWhiteLabelEnabled: boolean;
 }
 
@@ -51,6 +52,7 @@ export async function getOrgContextForUser(userId: string): Promise<OrgContext |
           featureSlideshow:    true,
           featureProducts:     true,
           featureCaseLite:     true,
+          featurePetAftercare: true,
           isWhiteLabelEnabled: true,
         },
       },
@@ -68,6 +70,7 @@ export async function getOrgContextForUser(userId: string): Promise<OrgContext |
     featureSlideshow:    member.organisation.featureSlideshow,
     featureProducts:     member.organisation.featureProducts,
     featureCaseLite:     member.organisation.featureCaseLite,
+    featurePetAftercare: member.organisation.featurePetAftercare,
     isWhiteLabelEnabled: member.organisation.isWhiteLabelEnabled,
   };
 }
@@ -181,7 +184,7 @@ export async function assertMemorialAccess(
  */
 export async function assertFeatureEnabled(
   userId: string,
-  feature: 'qrLifecycle' | 'pamphlet' | 'slideshow' | 'products' | 'caseLite',
+  feature: 'qrLifecycle' | 'pamphlet' | 'slideshow' | 'products' | 'caseLite' | 'petAftercare',
 ): Promise<OrgContext> {
   const ctx = await getOrgContextForUser(userId);
 
@@ -193,11 +196,12 @@ export async function assertFeatureEnabled(
   }
 
   const map: Record<typeof feature, boolean> = {
-    qrLifecycle: ctx.featureQrLifecycle,
-    pamphlet:    ctx.featurePamphlet,
-    slideshow:   ctx.featureSlideshow,
-    products:    ctx.featureProducts,
-    caseLite:    ctx.featureCaseLite,
+    qrLifecycle:  ctx.featureQrLifecycle,
+    pamphlet:     ctx.featurePamphlet,
+    slideshow:    ctx.featureSlideshow,
+    products:     ctx.featureProducts,
+    caseLite:     ctx.featureCaseLite,
+    petAftercare: ctx.featurePetAftercare,
   };
 
   if (!map[feature]) {

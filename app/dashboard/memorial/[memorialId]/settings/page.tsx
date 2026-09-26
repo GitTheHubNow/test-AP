@@ -7,6 +7,7 @@ import { DeleteModal } from '@/components/dashboard/DeleteModal';
 import { DownloadQRButton } from '@/components/dashboard/DownloadQRButton';
 import Link from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface SettingsPageProps {
   params: Promise<{ memorialId: string }>;
@@ -33,6 +34,14 @@ export default async function MemorialSettingsPage({ params }: SettingsPageProps
     select: {
       id: true, title: true, firstName: true, lastName: true,
       birthDate: true, deathDate: true, description: true, sealed: true, status: true,
+      funeralDate: true, nominatedName: true, nominatedEmail: true,
+      venueName: true, venueAddress: true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true, familyContact: true,
+          contactEmail: true, venueName: true, venueAddress: true,
+        },
+      },
       settings: {
         select: {
           primaryColor: true, backgroundColor: true, fontFamily: true,
@@ -46,6 +55,13 @@ export default async function MemorialSettingsPage({ params }: SettingsPageProps
   if (!memorial) notFound();
 
   const isLocked = memorial.sealed || memorial.status === 'ARCHIVED';
+
+  // Priority 3 (product roadmap) — case-linked memorials show/use the
+  // case's name as the real source of truth; see
+  // lib/memorial/resolveMemorialFields.ts. isCaseLinked also gates
+  // the name fields in MemorialSettingsForm to prevent editing a
+  // second, silently-diverging copy of the same fact.
+  const resolved = resolveMemorialFields(memorial);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--ivory)' }}>
@@ -108,13 +124,14 @@ export default async function MemorialSettingsPage({ params }: SettingsPageProps
             <MemorialSettingsForm
               memorialId={memorial.id}
               initialData={{
-                firstName:   memorial.firstName ?? '',
-                lastName:    memorial.lastName  ?? '',
+                firstName:   resolved.firstName ?? '',
+                lastName:    resolved.lastName  ?? '',
                 birthDate:   memorial.birthDate ? memorial.birthDate.toISOString().split('T')[0] : '',
                 deathDate:   memorial.deathDate ? memorial.deathDate.toISOString().split('T')[0] : '',
                 description: memorial.description ?? '',
               }}
               isLocked={isLocked}
+              isCaseLinked={resolved.isCaseLinked}
             />
           </div>
         </section>

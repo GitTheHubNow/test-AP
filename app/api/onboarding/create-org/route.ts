@@ -18,8 +18,19 @@
  * the same pattern already used (and load-bearing) in
  * app/api/org/invite/[token]/accept/route.ts. Preserve it.
  *
- * Body: { name: string }
+ * Body: { name: string, caseTypes?: ('HUMAN' | 'PET')[] }
  * Returns: { success: true, organisationId: string, slug: string }
+ *
+ * caseTypes drives which case-management feature(s) the new org gets
+ * from day one — featureCaseLite for HUMAN, featurePetAftercare for PET.
+ * This is deliberately a one-time choice made at signup, not a later
+ * self-serve settings toggle: which kind of business an org is doesn't
+ * change day to day, and pet aftercare is still a hand-rolled-out
+ * feature for a handful of prospects, so gating it here (rather than a
+ * switch any staff member could flip) keeps it from spreading beyond
+ * organisations that were actually meant to have it. Defaults to HUMAN
+ * only if omitted, preserving existing behaviour for the current sign-up
+ * flow/tests that don't yet send this field.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -27,6 +38,7 @@ import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 import { logError }                   from '@/lib/errors';
 import { checkRateLimit }             from '@/lib/rateLimit';
+import { CURRENT_TERMS_VERSION }      from '@/lib/legal';
 
 function slugify(name: string): string {
   return name
@@ -52,6 +64,23 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const rawName = typeof body?.name === 'string' ? body.name.trim() : '';
+
+    // ADDED — Terms/Privacy consent, enforced server-side, not just a
+    // disabled-until-checked button in the UI. A raw API call bypassing
+    // the frontend form must not be able to create an org without this;
+    // the checkbox is a UX affordance, this check is the actual gate.
+    if (body?.agreedToTerms !== true) {
+      return NextResponse.json(
+        { success: false, error: 'You must agree to the Terms of Service and Privacy Policy to continue.' },
+        { status: 400 },
+      );
+    }
+
+    const rawCaseTypes: unknown = body?.caseTypes;
+    const caseTypes: ('HUMAN' | 'PET')[] =
+      Array.isArray(rawCaseTypes) && rawCaseTypes.every(t => t === 'HUMAN' || t === 'PET') && rawCaseTypes.length > 0
+        ? rawCaseTypes
+        : ['HUMAN']; // preserve existing behaviour if the field is omitted
 
     if (!rawName || rawName.length < 2) {
       return NextResponse.json(
@@ -109,6 +138,11 @@ export async function POST(req: NextRequest) {
         name:       rawName,
         slug,
         plan:       'STARTER',
+        featureCaseLite:     caseTypes.includes('HUMAN'),
+        featurePetAftercare: caseTypes.includes('PET'),
+        termsAcceptedAt:       new Date(),
+        termsAcceptedVersion:  CURRENT_TERMS_VERSION,
+        termsAcceptedByUserId: userId,
         members: {
           create: { userId, role: 'OWNER' },
         },

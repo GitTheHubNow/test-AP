@@ -3,8 +3,8 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CommonErrors, successResponse, logError, handlePrismaError, handleAuthError } from '@/lib/errors';
 import { validateParam, MemorialIdSchema, GuestBookIdSchema } from '@/lib/validation';
-import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { recordApproval } from '@/lib/approvals';
 
 /**
  * POST /api/memorial/[memorialId]/guest-book/[entryId]/reject
@@ -13,6 +13,9 @@ import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
  * check — fixed to use assertMemorialAccess). Rejects a pending guest
  * book entry — it will not appear on the public memorial page. Mirrors
  * the memory reject route's shape.
+ *
+ * UPDATED: now uses lib/approvals.ts's recordApproval() instead of a
+ * hand-rolled $transaction, consistent with the other 3 entity types.
  */
 export async function POST(
   request: NextRequest,
@@ -48,23 +51,12 @@ export async function POST(
       return CommonErrors.notFound('Guest book entry');
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.guestBookEntry.update({
-        where: { id: entryId },
-        data: { status: 'REJECTED' },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          entityType: EntityType.GUEST_BOOK_ENTRY,
-          entityId: entryId,
-          action: AuditAction.REJECT,
-          actorId: userId,
-          actorRole: ActorRole.FUNERAL_HOME,
-          reasonCode: ReasonCode.MODERATION,
-          metadata: { memorialId: memorialId },
-        },
-      });
+    await recordApproval({
+      entity:     'GUEST_BOOK_ENTRY',
+      entityId:   entryId,
+      memorialId,
+      decision:   'REJECTED',
+      reviewedBy: userId,
     });
 
     return successResponse({ success: true });

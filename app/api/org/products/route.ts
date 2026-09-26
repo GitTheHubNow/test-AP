@@ -16,6 +16,7 @@ import { prisma }                     from '@/lib/prisma';
 import { getOrgIdForUser, assertFeatureEnabled } from '@/lib/tenant';
 import { VALID_PRODUCT_TYPES } from '@/lib/products/transitions';
 import { handleAuthError } from '@/lib/errors';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 const VALID_STATUSES = ['REQUESTED', 'QUOTED', 'APPROVED', 'FULFILLED', 'CANCELLED'] as const;
 
@@ -79,21 +80,36 @@ export async function GET(req: NextRequest) {
             firstName:     true,
             lastName:      true,
             preferredName: true,
+            nominatedName:  true,
+            nominatedEmail: true,
+            funeralDate:    true,
+            venueName:      true,
+            venueAddress:   true,
+            funeralCase: {
+              select: {
+                deceasedName: true, serviceDate: true,
+                familyContact: true, contactEmail: true,
+                venueName: true, venueAddress: true,
+              },
+            },
           },
         },
       },
     });
 
     // Compute display name server-side so client doesn't need to
-    const formatted = requests.map(r => ({
-      ...r,
-      memorialName:
-        r.memorial.preferredName ||
-        [r.memorial.firstName, r.memorial.lastName].filter(Boolean).join(' ') ||
-        r.memorial.title ||
-        'Memorial',
-      memorial: undefined, // strip the nested object
-    }));
+    const formatted = requests.map(r => {
+      const resolved = resolveMemorialFields(r.memorial);
+      return {
+        ...r,
+        memorialName:
+          r.memorial.preferredName ||
+          [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
+          r.memorial.title ||
+          'Memorial',
+        memorial: undefined, // strip the nested object
+      };
+    });
 
     return NextResponse.json({ success: true, data: { requests: formatted } });
 

@@ -16,6 +16,7 @@ import { auth }               from '@clerk/nextjs/server';
 import { prisma }             from '@/lib/prisma';
 import Link                   from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
@@ -44,6 +45,18 @@ export default async function SlideshowDashboardPage({ params }: Props) {
       firstName:     true,
       lastName:      true,
       preferredName: true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      funeralDate:    true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       organisation: {
         select: { featureSlideshow: true },
       },
@@ -59,11 +72,12 @@ export default async function SlideshowDashboardPage({ params }: Props) {
 
   if (!memorial) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
   const featureEnabled = memorial.organisation?.featureSlideshow ?? false;
 
   const displayName =
     memorial.preferredName ||
-    [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') ||
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
     memorial.title ||
     'This Memorial';
 

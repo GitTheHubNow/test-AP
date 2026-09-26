@@ -5,6 +5,7 @@ import { getPublicUrl } from '@/lib/upload-shared';
 import { PhotoCollectionManager } from '@/components/photos/PhotoCollectionManager';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface Props {
@@ -40,22 +41,39 @@ export default async function PhotosPage({ params }: Props) {
       workflowStage:    true,
       funeralDate:            true,
       tributeUnlockOverride:  true,
+      // PRIORITY 3 FIX: funeralDate feeds the gate below (server-side
+      // enforcement, not just display) and firstName/lastName feed the
+      // displayName further down — both stale-field risks for a
+      // case-linked memorial.
+      nominatedName:    true,
+      nominatedEmail:   true,
+      venueName:        true,
+      venueAddress:     true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
   if (!memorial) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
+
   // Server-side enforcement of the same gate the sidebar reflects — see
   // lib/memorial/journeyGate.ts. Photos unlocks together with Tribute
   // Video and Guest Book, normally 5 days before the service.
-  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
-    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+  if (!isTributeUnlocked({ funeralDate: resolved.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: resolved.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
     return (
       <SectionLockedScreen
         memorialId={memorial.id}
         sectionName="Photos"
         daysLeft={daysLeft}
-        hasFuneralDate={Boolean(memorial.funeralDate)}
+        hasFuneralDate={Boolean(resolved.funeralDate)}
       />
     );
   }
@@ -117,8 +135,8 @@ export default async function PhotosPage({ params }: Props) {
         id:            memorial.id,
         title:         memorial.title,
         displayName:   memorial.preferredName
-                        || (memorial.firstName && memorial.lastName
-                            ? `${memorial.firstName} ${memorial.lastName}`
+                        || (resolved.firstName && resolved.lastName
+                            ? `${resolved.firstName} ${resolved.lastName}`
                             : memorial.title),
         workflowStage: memorial.workflowStage,
         uploadUrl,

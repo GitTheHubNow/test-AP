@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { CommonErrors, successResponse, logError, handlePrismaError } from '@/lib/errors';
 // ── ADDED: SaaS launch imports ───────────────────────────────────────────────
 import { getOrgIdForUser } from '@/lib/tenant';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -47,6 +48,23 @@ export async function GET(request: NextRequest) {
         funeralDate:          true,
         publishPromptSentAt:  true,
         tributeUnlockOverride: true,
+        // PRIORITY 3 FIX: funeralDate/firstName/lastName above drive the
+        // "Ready to publish" / "No service date set" alerts and the
+        // list's name display below — stale on a case-linked memorial
+        // once staff edit the case instead. nominatedName/nominatedEmail/
+        // venueName/venueAddress aren't used by this route but are
+        // required by resolveMemorialFields()'s input shape.
+        nominatedName:  true,
+        nominatedEmail: true,
+        venueName:      true,
+        venueAddress:   true,
+        funeralCase: {
+          select: {
+            deceasedName: true, serviceDate: true,
+            familyContact: true, contactEmail: true,
+            venueName: true, venueAddress: true,
+          },
+        },
         handover: { select: { status: true } },
         _count: { select: { memories: { where: { status: 'PENDING' } } } },
       },
@@ -54,16 +72,17 @@ export async function GET(request: NextRequest) {
     });
 
     const withAlerts = memorials.map(m => {
-      const { _count, handover, ...rest } = m;
+      const { _count, handover, funeralCase, ...rest } = m;
       const pendingCount = _count.memories;
+      const resolved = resolveMemorialFields(m);
 
       // Same "day before service" timing as the publish-prompt email
       // (lib/memorial/journeyGate.ts: PUBLISH_PROMPT_DAYS_BEFORE) — kept
       // as an inline day-diff here rather than importing the job-facing
       // helper, since this only needs a yes/no, not the exact count.
       const now = new Date();
-      const daysUntilService = m.funeralDate
-        ? Math.round((new Date(m.funeralDate).setHours(0,0,0,0) - new Date(now).setHours(0,0,0,0)) / 86400000)
+      const daysUntilService = resolved.funeralDate
+        ? Math.round((new Date(resolved.funeralDate).setHours(0,0,0,0) - new Date(now).setHours(0,0,0,0)) / 86400000)
         : null;
 
       const alerts: { type: string; label: string }[] = [];
@@ -72,7 +91,7 @@ export async function GET(request: NextRequest) {
         alerts.push({ type: 'pending', label: `${pendingCount} to review` });
       }
       if (
-        m.funeralDate &&
+        resolved.funeralDate &&
         daysUntilService !== null &&
         daysUntilService <= 1 &&
         m.workflowStage !== 'LIVE' &&
@@ -80,14 +99,20 @@ export async function GET(request: NextRequest) {
       ) {
         alerts.push({ type: 'publish', label: 'Ready to publish' });
       }
-      if (!m.funeralDate && m.status === 'ACTIVE') {
+      if (!resolved.funeralDate && m.status === 'ACTIVE') {
         alerts.push({ type: 'no-date', label: 'No service date set' });
       }
       if (handover?.status === 'PENDING') {
         alerts.push({ type: 'handover', label: 'Handover awaiting family' });
       }
 
-      return { ...rest, alerts };
+      return {
+        ...rest,
+        firstName:   resolved.firstName,
+        lastName:    resolved.lastName,
+        funeralDate: resolved.funeralDate,
+        alerts,
+      };
     });
 
     return successResponse({ memorials: withAlerts });

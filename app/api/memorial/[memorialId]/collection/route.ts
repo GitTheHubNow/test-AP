@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
 import { verifyFileContent } from '@/lib/file-validation';
+import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
 
 /**
  * POST /api/memorial/[memorialId]/collection
@@ -88,6 +89,16 @@ export async function POST(
     const MAX = 50 * 1024 * 1024;
     if (file.size > MAX) {
       return NextResponse.json({ success: false, error: 'File too large (max 50MB)' }, { status: 400 });
+    }
+
+    // Cumulative per-memorial storage quota — checked before any of the
+    // expensive work below (buffer read, disk write). Even for staff
+    // uploads, the underlying storage cost is identical to a public
+    // submission, so the same quota applies with no staff exemption.
+    try {
+      await assertStorageQuotaAvailable(memorialId, file.size);
+    } catch (err: any) {
+      return NextResponse.json({ success: false, error: err.message }, { status: err.status ?? 413 });
     }
 
     // MIME type validation per item type

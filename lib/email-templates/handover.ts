@@ -201,3 +201,38 @@ export function renderHandoverAcceptedFamEmail({
     ${small(`This memorial will be preserved for 25 years. You can renew storage from your dashboard settings.`)}
   `);
 }
+
+export interface FamilyAccessGrantedEmailParams {
+  memorialTitle:     string;
+  familyContactName: string;
+  familyAccessUrl:   string;
+}
+
+export function renderFamilyAccessGrantedEmail({
+  memorialTitle,
+  familyContactName,
+  familyAccessUrl,
+}: FamilyAccessGrantedEmailParams): string {
+  memorialTitle     = escapeHtml(memorialTitle);
+  familyContactName = escapeHtml(familyContactName);
+  familyAccessUrl   = escapeHtml(familyAccessUrl);
+
+  return base(`
+    ${h1(`Manage ${memorialTitle}'s memorial`)}
+    ${sub(`A simple way to look after this memorial`)}
+    ${body(`Dear ${familyContactName},`)}
+    ${body(`The funeral home has given you the ability to manage this memorial yourself — no account or password needed.`)}
+    ${body(`Click the button below, or scan the QR code on the card you were given, and enter this email address when asked. From there you can hide comments you don't want shown, hide the whole memorial if needed, and update the photo, dates, or description.`)}
+    <table cellpadding="0" cellspacing="0" style="margin:28px 0;">
+      <tr>
+        <td style="background:#cdba93;border-radius:8px;">
+          <a href="${familyAccessUrl}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;font-family:Georgia,serif;">
+            Manage the Memorial →
+          </a>
+        </td>
+      </tr>
+    </table>
+    ${divider()}
+    ${small(`Keep this email — you can use this same link any time. If you weren't expecting this, please contact the funeral home who arranged the service.`)}
+  `);
+}

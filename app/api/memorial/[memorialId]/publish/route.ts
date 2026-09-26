@@ -41,6 +41,7 @@ export async function POST(
       workflowStage: true,
       status:        true,
       title:         true,
+      familyConsentConfirmed: true,
       _count: {
         select: {
           memories: { where: { status: 'APPROVED', isGuestBook: false } },
@@ -65,6 +66,16 @@ export async function POST(
   if (memorial._count.memories === 0) {
     return NextResponse.json(
       { success: false, error: 'Memorial needs at least one approved memory before publishing' },
+      { status: 422 }
+    );
+  }
+
+  // Family consent attestation — see app/api/memorial/[memorialId]/family-consent/route.ts.
+  // A deliberate, separate confirmation from publishing itself; this
+  // route will not publish without it having already been recorded.
+  if (!memorial.familyConsentConfirmed) {
+    return NextResponse.json(
+      { success: false, error: 'Confirm that you have the family\u2019s consent to publish this memorial before continuing.' },
       { status: 422 }
     );
   }

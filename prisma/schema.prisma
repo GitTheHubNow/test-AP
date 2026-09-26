@@ -153,6 +153,31 @@ enum CaseStatus {
   CANCELLED
 }
 
+// Pet aftercare — 5 fixed journey stages (see docs/pet-aftercare workflow
+// notes). Deliberately a real enum, not a free-text field like
+// Memorial.workflowStage — the pet journey has a small, fixed, ordered set
+// of stages with no per-org customisation planned, so an enum buys
+// compile-time safety and makes "what stage is this case in" queryable
+// without string matching. If a future org ever needs custom pet
+// workflows, that's a bigger design change, not an incremental add here.
+enum PetCaseStage {
+  INTAKE // Case created, pickup/drop-off arranged, not yet at the facility
+  RECEIVED // Pet received at the facility, identity/paperwork checked
+  IN_CARE // Cremation/aquamation in progress
+  READY // Process complete, ashes/products ready for return
+  RETURNED // Ashes returned to owner — terminal stage
+}
+
+// How the case first entered the system. Mirrors the "Vet / Owner" intake
+// branch in the original pet workflow notes — vets are the more common
+// referral source in practice, so this is tracked distinctly from a
+// walk-in owner rather than folded into a generic "source" free-text field.
+enum PetIntakeSource {
+  VET
+  OWNER
+  WALK_IN
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -201,6 +226,17 @@ model Memorial {
   // Phase 11-13: Workflow
   workflowStage   String    @default("COLLECTING")
   publishedAt     DateTime?
+  // Per-memorial family-consent attestation — the funeral home confirms
+  // they have the family's consent to publish THIS specific memorial's
+  // content, distinct from the org-level Terms/Privacy acceptance at
+  // signup (Organisation.termsAcceptedAt above). Deliberately a manual,
+  // separate action rather than something publish sets automatically —
+  // the whole point is a deliberate attestation step, not implied
+  // consent from clicking Publish. Enforced as a hard gate in
+  // app/api/memorial/[memorialId]/publish/route.ts.
+  familyConsentConfirmed         Boolean   @default(false)
+  familyConsentConfirmedAt       DateTime?
+  familyConsentConfirmedByUserId String?
   funeralDate     DateTime?
   collectionNotes String?   @db.Text
 
@@ -284,6 +320,12 @@ model Memorial {
   // won't have a case, especially existing V1 memorials.
   funeralCase FuneralCase?
 
+  // Pet aftercare: reverse relation to PetCase, same one-per-memorial
+  // shape as funeralCase above (memorialId is @unique on PetCase too).
+  // A memorial created via "create memorial from pet case" links back
+  // here; a memorial created the normal human way leaves this null.
+  petCase PetCase?
+
   @@index([ownerId])
   @@index([organisationId])
   @@index([qrTokenHash])
@@ -342,6 +384,14 @@ model Memory {
   visibleUntil     DateTime?
   stale            Boolean        @default(false)
   collectionItemId String?
+  // ADDED — family self-service hide, independent of `status` above.
+  // status is the funeral home's moderation decision (visible to public
+  // at all); familyHidden is the family's own display preference on top
+  // of that. Something can be status=APPROVED and familyHidden=true
+  // simultaneously — those are different questions. Deliberately left
+  // togglable even on sealed memories: sealing freezes content integrity
+  // (the message/author can't be silently altered), not display state.
+  familyHidden     Boolean        @default(false)
 
   memorial       Memorial        @relation(fields: [memorialId], references: [id], onDelete: Restrict)
   media          Media[]
@@ -590,12 +640,24 @@ model MemorialHandover {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
+  // ADDED — family self-service access, separate from the acceptToken
+  // flow above. acceptToken is one-time (accept → become a real Clerk
+  // owner); familyAccessToken is a repeat-use, non-expiring credential
+  // for the lower-friction "enter your email" control screen. The two
+  // are independent: a funeral home can offer either, both, or neither.
+  // Deliberately NOT unique-constrained the same way acceptToken forces
+  // a value — most handovers will never generate one.
+  familyAccessToken     String?  @unique
+  familyAccessEnabled   Boolean  @default(false)
+  familyAccessRevokedAt DateTime?
+
   memorial Memorial @relation(fields: [memorialId], references: [id], onDelete: Restrict)
 
   @@index([memorialId])
   @@index([status])
   @@index([scheduledAt])
   @@index([acceptToken])
+  @@index([familyAccessToken])
   @@map("memorial_handovers")
 }
 
@@ -616,6 +678,14 @@ model TributeVideo {
   durationSeconds Int?
   hdBlobKey       String?
   webBlobKey      String?
+  // Size of the rendered video file in bytes. Added so tribute videos
+  // count toward the per-memorial storage quota (STORAGE_MB_PER_MEMORIAL
+  // in lib/stripe.ts) — before this field existed, a memorial's video
+  // was invisible to any storage-usage calculation based on Media.sizeBytes,
+  // since TributeVideo isn't a Media row. Nullable because existing rows
+  // predate this field and their actual size isn't known retroactively;
+  // treated as 0 bytes in usage calculations until backfilled or re-rendered.
+  sizeBytes       Int?
   videoQrToken    String?     @unique
   showOnMemorial  Boolean     @default(false)
   renderedAt      DateTime?
@@ -666,6 +736,8 @@ model GuestBookEntry {
   flaggedByFilter Boolean         @default(false)
   filterReason    String?
   createdAt       DateTime        @default(now())
+  // ADDED — same reasoning as Memory.familyHidden above.
+  familyHidden    Boolean         @default(false)
 
   memorial Memorial @relation(fields: [memorialId], references: [id], onDelete: Cascade)
 
@@ -736,7 +808,13 @@ model FuneralCase {
   contactEmail  String?
   contactPhone  String?
   serviceDate   DateTime?
+  // venue: kept for backward compat (deprecated, not removed — same
+  // pattern used elsewhere this session). venueName/venueAddress are
+  // the real fields going forward, matching the richer format Memorial
+  // already used — see lib/memorial/resolveMemorialFields.ts.
   venue         String?
+  venueName     String?
+  venueAddress  String?
   notes         String?   @db.Text
 
   status CaseStatus @default(ACTIVE)
@@ -759,6 +837,201 @@ model FuneralCase {
   @@index([serviceDate])
   @@index([memorialId])
   @@map("funeral_cases")
+}
+
+// ============================================================================
+// PET AFTERCARE — separate model from FuneralCase by design.
+//
+// The two case types share almost no fields in practice (owner vs family
+// contact, species/breed vs venue/celebrant, 5 fixed stages vs open funeral
+// arrangements) and a shared/inherited model would recreate exactly the
+// "one source of truth" overlap problem that Priority 3 spent real effort
+// cleaning up between FuneralCase and Memorial. If genuine overlap emerges
+// later (e.g. both eventually need a shared Organisation-level case list),
+// that's a deliberate future refactor, not a default to design toward now.
+// ============================================================================
+
+model PetCase {
+  id             String @id @default(cuid())
+  organisationId String
+
+  // Free-text reference from the crematorium's own system, e.g. "PET-0087".
+  // Unique per org (not globally) — mirrors FuneralCase.caseRef exactly.
+  caseRef String
+
+  petName String
+  species String? // "Dog", "Cat", "Rabbit", etc — free text, not an enum:
+  // crematoriums handle enough variety (birds, reptiles, horses on rare
+  // occasion) that a fixed list would need constant extension for little
+  // benefit over a simple text field with input suggestions in the UI.
+  breed  String?
+
+  // Owner — deliberately named ownerContact*, not familyContact* or
+  // nominated*, so this can never be confused with Memorial's family-
+  // contact fields if/when a memorial is created from this case. The
+  // owner is who receives the tracker link and the ashes-ready notice.
+  ownerContactName  String
+  ownerContactEmail String?
+  ownerContactPhone String?
+
+  // Referring vet, when intakeSource is VET. Optional even then — some
+  // vets phone it in without a formal referral record.
+  intakeSource   PetIntakeSource @default(OWNER)
+  vetClinicName  String?
+  vetContactName String?
+  vetContactEmail String?
+  vetContactPhone String?
+
+  stage PetCaseStage @default(INTAKE)
+
+  serviceType String? // "Private cremation", "Communal cremation", "Aquamation" — free
+  // text for the same reason as species: the workflow doc lists these as
+  // examples, not an exhaustive fixed catalogue, and org-specific service
+  // names are likely (see FuneralCase.venue precedent for why this
+  // codebase prefers text over premature enums here).
+
+  notes String? @db.Text
+
+  status CaseStatus @default(ACTIVE)
+
+  // QR / identification — every pet case gets a physical tag/QR from
+  // intake (see original workflow notes: "QR identification" happens
+  // immediately after collection, before the facility even receives the
+  // animal). Separate from the owner tracker's own public token below —
+  // this one is scanned by STAFF to pull up the case and confirm identity
+  // at each handoff point, not shown to the owner.
+  qrTokenHash String? @unique
+
+  // Owner-facing public tracker — the direct analog of Memorial's
+  // publicToken/slug pair for /v/[slug]. Deliberately its own token
+  // rather than reusing Memorial's, because a pet case can exist (and be
+  // tracked by the owner) for weeks before any memorial is created, and
+  // should keep working even if a memorial never gets created at all.
+  trackerToken String? @unique
+
+  // Linked memorial once "create memorial from pet case" has run.
+  // Nullable + unique + SetNull, matching FuneralCase's exact pattern —
+  // deleting the memorial does not delete the pet case record.
+  memorialId String?   @unique
+  memorial   Memorial? @relation(fields: [memorialId], references: [id], onDelete: SetNull)
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  stageEvents PetCaseStageEvent[]
+
+  // Reverse relation: set only if this case originated from an approved
+  // PetIntakeRequest. Most cases won't have one (staff-created directly
+  // via the New Pet Case form) — nullable, one-to-one.
+  intakeRequest PetIntakeRequest?
+
+  collectedAt DateTime? // stage: INTAKE → RECEIVED trigger point
+  receivedAt  DateTime?
+  readyAt     DateTime?
+  returnedAt  DateTime? // terminal — stage RETURNED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, caseRef])
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([organisationId, stage])
+  @@index([memorialId])
+  @@index([qrTokenHash])
+  @@index([trackerToken])
+  @@map("pet_cases")
+}
+
+// Append-only audit trail of stage transitions — deliberately a separate
+// table rather than just overwriting PetCase.stage in place, because the
+// owner tracker page needs to render a progress list ("Collected ✓ →
+// Received ✓ → In care 🔄 → Ready → Returned") with real timestamps per
+// step, not just "currently on stage X". Mirrors the append-only intent
+// of AuditEvent elsewhere in this schema, but kept as its own table
+// (rather than reusing AuditEvent) since this needs to be cheaply
+// queryable and renderable on a public page with no auth, which the
+// general-purpose internal AuditEvent table is not designed for.
+model PetCaseStageEvent {
+  id        String       @id @default(cuid())
+  petCaseId String
+  stage     PetCaseStage
+  note      String? // optional staff note visible on internal case view only
+  createdAt DateTime     @default(now())
+  createdBy String? // staff user id; null for system-generated transitions
+
+  petCase PetCase @relation(fields: [petCaseId], references: [id], onDelete: Cascade)
+
+  @@index([petCaseId])
+  @@map("pet_case_stage_events")
+}
+
+// Public QR intake — a vet or owner scans the org's fixed petIntakeToken
+// and fills out this form themselves. Deliberately NOT written straight
+// into PetCase: this is an unauthenticated, anyone-with-the-QR-code
+// submission path, so it goes through the same pending-review pattern
+// already used for GuestBookEntry and Memory rather than creating a live
+// case directly — a bogus or duplicate submission becoming a real case
+// with no staff involved would be a worse failure mode than one extra
+// staff click to approve. Staff reviewing a request can edit any field
+// before approving (people fill forms on their phones in stressful
+// circumstances; typos and vague answers are expected), and approving
+// creates the actual PetCase — see the review-queue API route.
+model PetIntakeRequest {
+  id             String @id @default(cuid())
+  organisationId String
+
+  submittedBy PetIntakeSource // who filled this out — same enum as PetCase.intakeSource
+
+  petName String
+  species String?
+  breed   String?
+
+  ownerContactName  String
+  ownerContactEmail String?
+  ownerContactPhone String?
+
+  // Only meaningful when submittedBy is VET — same fields as PetCase's
+  // vet* columns, kept separate rather than shared because this is
+  // unvalidated public input, not yet a trusted staff-entered record.
+  vetClinicName   String?
+  vetContactName  String?
+  vetContactEmail String?
+  vetContactPhone String?
+
+  serviceType String?
+  notes       String? @db.Text // whatever the submitter typed in the free-text field
+
+  status PetIntakeStatus @default(PENDING)
+
+  // Set when a staff member approves this request and it becomes a real
+  // PetCase. Nullable/unique — mirrors PetCase.memorialId's shape for a
+  // one-to-one "this became that" link.
+  resultingPetCaseId String?  @unique
+  resultingPetCase   PetCase? @relation(fields: [resultingPetCaseId], references: [id], onDelete: SetNull)
+
+  reviewedBy String? // staff user id who approved/rejected
+  reviewedAt DateTime?
+  rejectionReason String?
+
+  // Basic spam/abuse signals — same pattern as GuestBookEntry, since this
+  // is exactly the same trust level (public, unauthenticated, free text).
+  ipHash String?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([ipHash])
+  @@index([createdAt])
+  @@map("pet_intake_requests")
+}
+
+enum PetIntakeStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ============================================================================
@@ -791,6 +1064,16 @@ model Organisation {
   currentPeriodEnd   DateTime?
   cancelAtPeriodEnd  Boolean            @default(false)
   trialEndsAt        DateTime?
+  // Signup-time consent — captured once, at org creation, in
+  // app/api/onboarding/create-org/route.ts. Tracks WHO on the org
+  // accepted (not just "the org"), WHEN, and WHICH version of the
+  // Terms/Privacy Policy, since re-prompting on a future material
+  // change means comparing against a stored version, not just checking
+  // a boolean. See app/privacy/page.tsx and app/terms/page.tsx's own
+  // "Last updated" line for the version string this should match.
+  termsAcceptedAt        DateTime?
+  termsAcceptedVersion   String?
+  termsAcceptedByUserId  String?
   memorialsThisMonth Int                @default(0)
   videosThisMonth    Int                @default(0)
   logoKey            String? // V1: storage path key (kept for backward compat)
@@ -833,6 +1116,20 @@ model Organisation {
   // Phase 18: Case Lite feature flag. Default false — no existing org sees
   // Cases until explicitly enabled.
   featureCaseLite    Boolean @default(false)
+  // Pet aftercare feature flag. Same additive pattern as featureCaseLite —
+  // default false, so this is entirely opt-in and invisible to the 3
+  // existing human-funeral customers unless/until explicitly enabled per
+  // org (matches the "depth over breadth" rollout approach — pet
+  // crematorium prospects get this turned on individually, not globally).
+  featurePetAftercare Boolean @default(false)
+  // Org-level, reusable QR intake token — printed once (e.g. at the front
+  // desk, or handed to a referring vet clinic) rather than generated
+  // per-submission like CollectionInvite.token. Anyone who scans it can
+  // submit a pet intake request; see PetIntakeRequest for why that lands
+  // in a review queue rather than creating a live PetCase directly.
+  // Nullable: generated lazily on first use, same pattern as
+  // Memorial.publicToken.
+  petIntakeToken      String? @unique
 
   // Phase 19: Per-org email notification overrides. Null = use platform
   // defaults (see lib/email/policy.ts). Additive, nullable, no backfill needed.
@@ -842,6 +1139,8 @@ model Organisation {
   invites      OrgInvite[]
   memorials    Memorial[]
   funeralCases FuneralCase[]
+  petCases     PetCase[]
+  petIntakeRequests PetIntakeRequest[]
 
   @@index([clerkOrgId])
   @@index([slug])

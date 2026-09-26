@@ -5,6 +5,7 @@ import { getPublicUrl }       from '@/lib/upload-shared';
 import { TributeVideoCreator } from '@/components/video/TributeVideoCreator';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface Props {
@@ -45,6 +46,20 @@ export default async function VideoPage({ params }: Props) {
       deathDate:     true,
       funeralDate:   true,
       tributeUnlockOverride: true,
+      // PRIORITY 3 FIX: funeralDate feeds the server-side gate below;
+      // firstName/lastName feed displayName further down. Both are
+      // stale-field risks for a case-linked memorial.
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       tributeVideo: {
         select: {
           id:             true,
@@ -63,18 +78,20 @@ export default async function VideoPage({ params }: Props) {
 
   if (!memorial) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
+
   // Server-side enforcement of the same gate the sidebar reflects —
   // a locked nav item alone wouldn't stop someone typing this URL
   // directly. Staff can still unlock early right here (e.g. family
   // arrived with a USB stick of photos ready to go on day one).
-  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
-    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+  if (!isTributeUnlocked({ funeralDate: resolved.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: resolved.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
     return (
       <SectionLockedScreen
         memorialId={memorial.id}
         sectionName="Tribute Video"
         daysLeft={daysLeft}
-        hasFuneralDate={Boolean(memorial.funeralDate)}
+        hasFuneralDate={Boolean(resolved.funeralDate)}
       />
     );
   }
@@ -115,7 +132,7 @@ export default async function VideoPage({ params }: Props) {
 
   const displayName =
     memorial.preferredName ||
-    [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') ||
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
     memorial.title ||
     'Memorial';
 

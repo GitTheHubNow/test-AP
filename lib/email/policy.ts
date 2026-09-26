@@ -28,12 +28,14 @@ export type EmailType =
   | 'HANDOVER_INITIATED'    // handover created → family contact
   | 'HANDOVER_ACCEPTED_FH'  // handover accepted → funeral home
   | 'HANDOVER_ACCEPTED_FAM' // handover accepted → family (confirmation)
+  | 'FAMILY_ACCESS_GRANTED' // family self-service QR/link generated → family
   | 'EXPIRY_WARNING'        // 5 years before expiry → owner (cron)
   | 'MEMORIAL_SUSPENDED'    // on expiry → owner (cron)
   | 'PRODUCT_STATUS'        // product request status change → opt-in only
   | 'APPROVED_CONFIRMATION' // SUPPRESSED — owner just did the action
   | 'LAST_CHANCE_UPLOAD'    // 5 days before service → family (cron)
   | 'PUBLISH_PROMPT'        // 1 day before service → owner/staff (cron)
+  | 'PAYMENT_FAILED'        // Stripe invoice.payment_failed → org owner
 
 // ── Platform defaults ─────────────────────────────────────────────────────────
 // true  = send by default, org can opt out
@@ -47,12 +49,22 @@ const PLATFORM_DEFAULTS: Record<EmailType, boolean> = {
   HANDOVER_INITIATED:    true,
   HANDOVER_ACCEPTED_FH:  true,
   HANDOVER_ACCEPTED_FAM: true,
+  // Deliberately not overridable to false via notificationPrefs (see
+  // shouldSend below) — same reasoning as PAYMENT_FAILED. This email
+  // IS the delivery mechanism for the family's access link/QR; there's
+  // no other way for them to get it if an org disables this type.
+  FAMILY_ACCESS_GRANTED: true,
   EXPIRY_WARNING:        true,
   MEMORIAL_SUSPENDED:    true,
   PRODUCT_STATUS:        false,  // opt-in only
   APPROVED_CONFIRMATION: false,  // permanently suppressed — noise
   LAST_CHANCE_UPLOAD:    true,
   PUBLISH_PROMPT:        true,
+  // Deliberately not overridable to false via notificationPrefs (see
+  // shouldSend below) — an org should never be able to silently miss
+  // a failed payment, since the consequence is losing the ability to
+  // create new memorials with no other warning.
+  PAYMENT_FAILED:        true,
 };
 
 // ── Batch cooldown windows (ms) ───────────────────────────────────────────────
@@ -95,6 +107,16 @@ export async function shouldSend(
 ): Promise<boolean> {
   // APPROVED_CONFIRMATION is permanently suppressed — never send
   if (type === 'APPROVED_CONFIRMATION') return false;
+
+  // PAYMENT_FAILED is permanently forced on — an org must never be able
+  // to opt out of the one email that warns them they're about to lose
+  // the ability to create new memorials.
+  if (type === 'PAYMENT_FAILED') return true;
+
+  // FAMILY_ACCESS_GRANTED is permanently forced on — see the comment on
+  // its PLATFORM_DEFAULTS entry above. There is no other path for the
+  // family to receive their access link/QR if this were suppressible.
+  if (type === 'FAMILY_ACCESS_GRANTED') return true;
 
   const platformDefault = PLATFORM_DEFAULTS[type] ?? true;
 

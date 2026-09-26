@@ -78,6 +78,11 @@ export const ReasonCode = {
   // Referenced by memory approve/reject routes before this fix — see
   // ActorRole.FUNERAL_HOME comment above for the same underlying issue.
   MODERATION:  'MODERATION',
+  // Family self-service actions (hide/show memorial, hide a comment,
+  // edit basic details) via the family-access session — see
+  // lib/familyAccess.ts. Distinct from HANDOVER above, which marks the
+  // one-time ownership transfer event itself, not ongoing use of it.
+  FAMILY_SELF_SERVICE: 'FAMILY_SELF_SERVICE',
   // Referenced by lib/immutability.ts before this fix — same underlying
   // issue as ActorRole.FUNERAL_HOME above. Used when a correction is made
   // to previously-recorded (but not yet sealed) content.

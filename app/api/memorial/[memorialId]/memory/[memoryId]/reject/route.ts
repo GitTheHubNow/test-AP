@@ -3,8 +3,8 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CommonErrors, successResponse, logError, handlePrismaError, handleAuthError } from '@/lib/errors';
 import { validateParam, MemorialIdSchema, MemoryIdSchema } from '@/lib/validation';
-import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { recordApproval } from '@/lib/approvals';
 
 export async function POST(
   request: NextRequest,
@@ -34,27 +34,15 @@ export async function POST(
     if (!memorial) return CommonErrors.notFound('Memorial');
     if (memorial.readOnly) return CommonErrors.badRequest('Memorial is read-only');
 
-    // Reject memory with audit
-    await prisma.$transaction(async (tx) => {
-      await tx.memory.update({
-        where: { id: memoryId },
-        data: {
-          status: 'REJECTED',
-          rejectedAt: new Date(),
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          entityType: EntityType.MEMORY,
-          entityId: memoryId,
-          action: AuditAction.REJECT,
-          actorId: userId,
-          actorRole: ActorRole.FUNERAL_HOME,
-          reasonCode: ReasonCode.MODERATION,
-          metadata: { memorialId: memorialId },
-        },
-      });
+    // UPDATED: was a hand-rolled $transaction — now shared via
+    // lib/approvals.ts's recordApproval(). rejectedAt is still set,
+    // matching the original behaviour exactly (see approvals.ts).
+    await recordApproval({
+      entity:     'MEMORY',
+      entityId:   memoryId,
+      memorialId,
+      decision:   'REJECTED',
+      reviewedBy: userId,
     });
 
     return successResponse({ success: true });

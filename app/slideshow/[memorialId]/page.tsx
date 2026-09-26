@@ -13,6 +13,7 @@ import { redirect, notFound } from 'next/navigation';
 import { auth }               from '@clerk/nextjs/server';
 import { prisma }             from '@/lib/prisma';
 import { SlideshowPageClient } from '@/components/slideshow/SlideshowPageClient';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,24 @@ export async function generateMetadata({ params }: Props) {
 
   const memorial = await prisma.memorial.findUnique({
     where:  { id: memorialId },
-    select: { title: true, firstName: true, lastName: true, preferredName: true },
+    select: {
+      title: true, firstName: true, lastName: true, preferredName: true,
+      nominatedName: true, nominatedEmail: true,
+      funeralDate: true, venueName: true, venueAddress: true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
+    },
   });
   if (!memorial) return { title: 'Slideshow' };
+  const resolved = resolveMemorialFields(memorial);
   const name =
     memorial.preferredName ||
-    [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') ||
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
     memorial.title ||
     'Memorial';
   return { title: `${name} — Slideshow` };
@@ -54,14 +67,25 @@ export default async function SlideshowPage({ params }: Props) {
       firstName:     true,
       lastName:      true,
       preferredName: true,
+      nominatedName: true, nominatedEmail: true,
+      funeralDate:   true, venueName: true, venueAddress: true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
   if (!memorial || memorial.ownerId !== userId) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
+
   const displayName =
     memorial.preferredName ||
-    [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') ||
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
     memorial.title ||
     'Memorial';
 

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { PublicUploadForm } from '@/components/upload/PublicUploadForm';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ token: string }>;
@@ -20,13 +21,26 @@ export default async function UploadPage({ params }: Props) {
       funeralDate:      true,
       uploadLinkEnabled: true,
       workflowStage:    true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
   if (!memorial || !memorial.uploadLinkEnabled) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
+
   const displayName = memorial.preferredName
-    || (memorial.firstName && memorial.lastName ? `${memorial.firstName} ${memorial.lastName}` : memorial.title);
+    || (resolved.firstName && resolved.lastName ? `${resolved.firstName} ${resolved.lastName}` : memorial.title);
 
   return (
     <div style={{ minHeight: '100vh', background: '#faf8f5' }}>
@@ -45,9 +59,9 @@ export default async function UploadPage({ params }: Props) {
           <p style={{ fontFamily: 'Georgia, serif', fontSize: '1rem', color: '#98a2b3', lineHeight: 1.7 }}>
             In memory of <strong style={{ color: '#1a1714' }}>{displayName}</strong>
           </p>
-          {memorial.funeralDate && (
+          {resolved.funeralDate && (
             <p style={{ fontFamily: 'Georgia, serif', fontSize: '0.85rem', color: '#b0a898', marginTop: '0.35rem' }}>
-              {new Date(memorial.funeralDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {new Date(resolved.funeralDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           )}
         </div>

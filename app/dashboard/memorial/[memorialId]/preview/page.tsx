@@ -5,6 +5,7 @@ import { MemoryStatus, MediaStatus } from '@prisma/client';
 import { getPublicUrl } from '@/lib/upload-shared';
 import { PreviewWorkspace } from '@/components/preview/PreviewWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
@@ -38,12 +39,24 @@ export default async function PreviewPage({ params }: Props) {
       status:                true,
       workflowStage:         true,
       publishedAt:           true,
+      familyConsentConfirmed: true,
       funeralDate:           true,
       readOnly:              true,
       isAboriginal:          true,
       isTorresStraitIslander: true,
       isSouthSeaIslander:    true,
       isMaori:               true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       settings: {
         select: {
           primaryColor:    true,
@@ -63,6 +76,8 @@ export default async function PreviewPage({ params }: Props) {
   });
 
   if (!memorial) notFound();
+
+  const resolved = resolveMemorialFields(memorial);
 
   // Fetch approved memories for the preview
   const memories = await prisma.memory.findMany({
@@ -128,30 +143,32 @@ export default async function PreviewPage({ params }: Props) {
   const collectionUnsorted = memorial.collectionItems.filter(i => i.status === 'UNSORTED').length;
 
   const checklist = {
-    hasName:        !!(memorial.firstName || memorial.lastName || memorial.title),
+    hasName:        !!(resolved.firstName || resolved.lastName || memorial.title),
     hasDates:       !!(memorial.birthDate || memorial.deathDate),
     hasDescription: !!memorial.description,
     hasMemories:    memories.length > 0,
     hasMedia:       collectionApproved > 0,
     noUnsorted:     collectionUnsorted === 0,
+    hasConsent:     memorial.familyConsentConfirmed,
   };
 
   const checklistPassed = Object.values(checklist).filter(Boolean).length;
   const checklistTotal  = Object.values(checklist).length;
-  const canPublish      = checklist.hasName && checklist.hasMemories;
+  const canPublish      = checklist.hasName && checklist.hasMemories && checklist.hasConsent;
 
   return (
     <PreviewWorkspace
       memorial={{
         id:             memorial.id,
         title:          memorial.title,
-        firstName:      memorial.firstName,
-        lastName:       memorial.lastName,
+        firstName:      resolved.firstName,
+        lastName:       resolved.lastName,
         description:    memorial.description,
         birthDate:      fmtDate(memorial.birthDate),
         deathDate:      fmtDate(memorial.deathDate),
         workflowStage:  memorial.workflowStage,
         publishedAt:    memorial.publishedAt?.toISOString() ?? null,
+        familyConsentConfirmed: memorial.familyConsentConfirmed,
         primaryColor,
         backgroundColor,
         showTimeline,

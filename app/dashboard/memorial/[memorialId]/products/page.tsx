@@ -17,18 +17,17 @@ import {
   VALID_PRODUCT_TYPES,
 } from '@/lib/products/transitions';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields, type MemorialFieldSource } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
 }
 
-function displayName(m: {
-  title: string; firstName?: string | null;
-  lastName?: string | null; preferredName?: string | null;
-}): string {
+function displayName(m: MemorialFieldSource & { title: string; preferredName?: string | null }): string {
+  const resolved = resolveMemorialFields(m);
   return (
     m.preferredName ||
-    [m.firstName, m.lastName].filter(Boolean).join(' ') ||
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ||
     m.title ||
     'Memorial'
   );
@@ -67,6 +66,18 @@ export default async function ProductsPage({ params }: Props) {
       firstName:     true,
       lastName:      true,
       preferredName: true,
+      funeralDate:    true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       organisation:  { select: { featureProducts: true } },
     },
   });

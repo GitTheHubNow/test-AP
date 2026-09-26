@@ -1,20 +1,21 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/unlock-memorials",
-      "schedule": "0 16 * * *"
-    },
-    {
       "path": "/api/cron/run",
-      "schedule": "0 17 * * *"
+      "schedule": "0 20 * * *"
     },
     {
       "path": "/api/cron/maintenance",
-      "schedule": "0 18 * * *"
+      "schedule": "30 20 * * *"
+    },
+    {
+      "path": "/api/cron/unlock-memorials",
+      "schedule": "0 21 * * *"
     },
     {
       "path": "/api/cron/reset-usage",
-      "schedule": "0 15 1 * *"
+      "schedule": "0 0 1 * *"
     }
   ]
 }

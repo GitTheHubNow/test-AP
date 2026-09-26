@@ -27,6 +27,16 @@ import { randomUUID } from 'crypto';
 import { addDays } from 'date-fns';
 import { sendHandoverInitiated } from '@/lib/email/send';
 import { isAutoHandoverDue } from '@/lib/memorial/journeyGate';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
+
+// PRIORITY 3 FIX: this job used to read funeralDate/nominatedEmail/
+// nominatedName straight off Memorial. For a case-linked memorial those
+// columns can go stale once staff start editing family-contact details
+// on the case instead — and this job doesn't just send an email off
+// that data, it writes a permanent MemorialHandover record with the
+// contact baked in as familyContactEmail/familyContactName. A stale
+// value here isn't a display bug, it's an accept-link going to the
+// wrong person. Every candidate is now resolved before use.
 
 const SYSTEM_ACTOR = 'system';
 
@@ -37,15 +47,34 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
 
   const candidates = await prisma.memorial.findMany({
     where: {
-      status:         MemorialStatus.ACTIVE,
-      funeralDate:    { not: null },
-      nominatedEmail: { not: null },
+      status: MemorialStatus.ACTIVE,
+      // Widened for the same reason as the journey-automation jobs — a
+      // case-linked memorial can have funeralDate/nominatedEmail: null
+      // on its own columns while the case's serviceDate/contactEmail
+      // are the real trigger and recipient.
+      OR: [
+        { funeralDate: { not: null }, nominatedEmail: { not: null } },
+        {
+          funeralCase: {
+            serviceDate:  { not: null },
+            contactEmail: { not: null },
+          },
+        },
+      ],
     },
     select: {
       id: true, title: true, firstName: true, lastName: true,
       funeralDate: true, nominatedEmail: true, nominatedName: true,
+      venueName: true, venueAddress: true,
       ownerId: true, organisationId: true,
       handover: { select: { id: true, status: true } },
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
@@ -53,8 +82,10 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
 
   for (const memorial of candidates) {
     try {
-      if (!memorial.funeralDate || !memorial.nominatedEmail) continue;
-      if (!isAutoHandoverDue(memorial.funeralDate, now)) continue;
+      const resolved = resolveMemorialFields(memorial);
+
+      if (!resolved.funeralDate || !resolved.nominatedEmail) continue;
+      if (!isAutoHandoverDue(resolved.funeralDate, now)) continue;
 
       // Skip if staff already started handover manually (any status) or
       // it's already been completed — this job only fills the gap when
@@ -62,12 +93,12 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
       if (memorial.handover) continue;
 
       const memorialTitle = memorial.title
-        || [memorial.firstName, memorial.lastName].filter(Boolean).join(' ')
+        || [resolved.firstName, resolved.lastName].filter(Boolean).join(' ')
         || 'the memorial';
 
       const acceptToken          = randomUUID();
       const acceptTokenExpiresAt = addDays(now, 30);
-      const familyContactName    = memorial.nominatedName?.trim() || 'there';
+      const familyContactName    = resolved.nominatedName?.trim() || 'there';
 
       await prisma.$transaction(async (tx) => {
         const record = await tx.memorialHandover.create({
@@ -76,7 +107,7 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
             initiatedBy:          SYSTEM_ACTOR,
             status:               HandoverStatus.PENDING,
             familyContactName,
-            familyContactEmail:   memorial.nominatedEmail!,
+            familyContactEmail:   resolved.nominatedEmail!,
             familyContactPhone:   null,
             scheduledAt:          null,
             acceptToken,
@@ -95,7 +126,7 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
             reasonCode: ReasonCode.HANDOVER,
             metadata: {
               memorialId:         memorial.id,
-              familyContactEmail: memorial.nominatedEmail,
+              familyContactEmail: resolved.nominatedEmail,
               autoTriggered:      true,
             },
           },
@@ -113,7 +144,7 @@ export async function runAutoHandoverJob(): Promise<{ processed: number; initiat
 
       try {
         await sendHandoverInitiated({
-          familyEmail:       memorial.nominatedEmail,
+          familyEmail:       resolved.nominatedEmail,
           familyContactName,
           memorialId:        memorial.id,
           memorialTitle,

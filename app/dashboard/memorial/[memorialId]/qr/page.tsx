@@ -36,6 +36,7 @@ import { auth } from '@clerk/nextjs/server';
 import LifecyclePanel from '@/components/qr/LifecyclePanel';
 import { ensurePublicToken } from '@/lib/qr';
 import { MemorialJourney } from '@/components/journey/MemorialJourney';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 import type { QRState } from '@/types/v2';
 
 export default async function QRPage({ params }: { params: Promise<{ memorialId: string }> }) {
@@ -61,16 +62,30 @@ export default async function QRPage({ params }: { params: Promise<{ memorialId:
       serviceStartAt: true,
       unlockAt: true,
       workflowStage: true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      funeralDate:    true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
   if (!memorial) notFound();
+
+  const resolved = resolveMemorialFields(memorial);
 
   const pendingCount = await prisma.memory.count({
     where: { memorialId: memorial.id, status: 'PENDING' },
   });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const name = [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') || 'Memorial';
+  const name = [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') || 'Memorial';
 
   // ensurePublicToken (lib/qr.ts) is the single canonical lazy-generation
   // implementation — GET /api/memorials/[id]/qr, app/v/[slug]/page.tsx,

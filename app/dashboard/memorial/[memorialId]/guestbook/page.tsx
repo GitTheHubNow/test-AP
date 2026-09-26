@@ -5,6 +5,7 @@ import { GuestBookList } from '@/components/GuestBookList';
 import Link from 'next/link';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 import { SectionLockedScreen } from '@/components/memorial/SectionLockedScreen';
 
 interface GuestBookPageProps {
@@ -30,22 +31,42 @@ export default async function GuestBookPage({ params }: GuestBookPageProps) {
     select: {
       id: true, title: true,
       funeralDate: true, tributeUnlockOverride: true,
+      // PRIORITY 3 FIX: this is server-side enforcement of the section
+      // gate (see comment below) — a stale funeralDate on a case-linked
+      // memorial could let staff bypass a lock that should still be
+      // active, or block access that should already be open. Not just
+      // display: an access-control decision.
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      firstName:      true,
+      lastName:       true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
   if (!memorial) notFound();
 
+  const resolvedFuneralDate = resolveMemorialFields(memorial).funeralDate;
+
   // Server-side enforcement of the same gate the sidebar reflects — see
   // lib/memorial/journeyGate.ts. Guest Book unlocks together with Photos
   // and Tribute Video, normally 5 days before the service.
-  if (!isTributeUnlocked({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
-    const daysLeft = daysUntilTributeUnlock({ funeralDate: memorial.funeralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
+  if (!isTributeUnlocked({ funeralDate: resolvedFuneralDate, tributeUnlockOverride: memorial.tributeUnlockOverride })) {
+    const daysLeft = daysUntilTributeUnlock({ funeralDate: resolvedFuneralDate, tributeUnlockOverride: memorial.tributeUnlockOverride });
     return (
       <SectionLockedScreen
         memorialId={memorial.id}
         sectionName="Guest Book"
         daysLeft={daysLeft}
-        hasFuneralDate={Boolean(memorial.funeralDate)}
+        hasFuneralDate={Boolean(resolvedFuneralDate)}
       />
     );
   }

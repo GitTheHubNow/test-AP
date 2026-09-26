@@ -28,6 +28,7 @@ import { MemorialShell }  from '@/components/shell/MemorialShell';
 import { MemorialGate }   from '@/components/memorial/MemorialGate';
 import { MemorialPageClient } from '@/components/memorial/MemorialPageClient';
 import { CulturalWarning }    from '@/components/memorial/CulturalWarning';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 import {
   PamphletView,
   WaitingView,
@@ -87,6 +88,29 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
       sealed:            true,
       organisationId:    true,
       title:             true, // for the gate's display heading only
+      // PRIORITY 3 FIX: nominatedName/nominatedEmail are required by
+      // resolveMemorialFields()'s input shape even though this public
+      // page never displays them — the resolver returns a single
+      // resolved bundle (name/date/venue) covering all case-linked
+      // fields together, so partial input isn't possible. funeralCase
+      // itself is what actually matters here: firstName/lastName/
+      // funeralDate/venueName/venueAddress below are the exact fields
+      // that go stale on a case-linked memorial once staff edit the
+      // case instead of the memorial (see resolveMemorialFields.ts) —
+      // and this is the permanent public page every printed QR code
+      // points to, so a stale name/venue/date here is publicly visible.
+      nominatedName:     true,
+      nominatedEmail:    true,
+      funeralCase: {
+        select: {
+          deceasedName:  true,
+          serviceDate:   true,
+          familyContact: true,
+          contactEmail:  true,
+          venueName:     true,
+          venueAddress:  true,
+        },
+      },
       // ── ADDED: needed to render full memorial content for MEMORIAL_OPEN
       // and to check the cultural warning flags (previously only fetched
       // by the now-deleted app/[slug]/page.tsx, which this route replaces).
@@ -205,10 +229,16 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
       memorial.isSouthSeaIslander ||
       memorial.isMaori;
 
+    // PRIORITY 3 FIX: resolve once here rather than reading
+    // memorial.firstName/lastName/funeralDate/venueName/venueAddress
+    // raw — for a case-linked memorial, the case is the source of
+    // truth for these fields (see resolveMemorialFields.ts).
+    const resolved = resolveMemorialFields(memorial);
+
     const displayName =
       memorial.preferredName ||
-      (memorial.firstName && memorial.lastName
-        ? `${memorial.firstName} ${memorial.lastName}`
+      (resolved.firstName && resolved.lastName
+        ? `${resolved.firstName} ${resolved.lastName}`
         : memorial.title);
 
     const heroUrl = memorial.heroImageKey
@@ -235,16 +265,16 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
       publicToken,    // passed to client so it can call the unlock-cookie route
       needsCookieSet,
       displayName,
-      firstName:      memorial.firstName,
-      lastName:       memorial.lastName,
+      firstName:      resolved.firstName,
+      lastName:       resolved.lastName,
       birthDate:      memorial.birthDate?.toISOString()   ?? null,
       deathDate:      memorial.deathDate?.toISOString()   ?? null,
       description:    memorial.description                ?? null,
       heroUrl,
       serviceType:    memorial.serviceType   ?? null,
       serviceTime:    memorial.serviceTime?.toISOString() ?? null,
-      venueName:      memorial.venueName     ?? null,
-      venueAddress:   memorial.venueAddress  ?? null,
+      venueName:      resolved.venueName     ?? null,
+      venueAddress:   resolved.venueAddress  ?? null,
       placeOfPassing: memorial.placeOfPassing ?? null,
       videoUrl,
       settings: {
@@ -294,7 +324,22 @@ export default async function QrLandingPage({ params, searchParams }: Props) {
     return <MemorialPageClient memorial={serialised} />;
   }
 
-  const data = memorial as unknown as MemorialPublicData;
+  // PRIORITY 3 FIX: PamphletView/WaitingView/ArchivedView all read
+  // firstName/lastName/funeralDate/venueName/venueAddress off this cast
+  // directly (see MemorialPublicData in types/v2.ts) — same stale-field
+  // risk as the MEMORIAL_OPEN branch above, since these are exactly the
+  // fields a linked case can override. Resolve first, then overlay the
+  // resolved values onto the cast object so every consumer of `data`
+  // downstream sees the same resolved truth as the rest of the page.
+  const resolvedPreOpen = resolveMemorialFields(memorial);
+  const data = {
+    ...(memorial as unknown as MemorialPublicData),
+    firstName:    resolvedPreOpen.firstName,
+    lastName:     resolvedPreOpen.lastName,
+    funeralDate:  resolvedPreOpen.funeralDate,
+    venueName:    resolvedPreOpen.venueName,
+    venueAddress: resolvedPreOpen.venueAddress,
+  };
 
   return (
     <MemorialShell theme={theme}>
@@ -354,6 +399,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       preferredName: true,
       qrState:       true,
       status:        true,
+      // PRIORITY 3 FIX: same stale-field risk as the main page render —
+      // an indexable page title built from a case-linked memorial's own
+      // (possibly stale) name columns would show the wrong name in
+      // search results / link previews.
+      nominatedName:  true,
+      nominatedEmail: true,
+      funeralDate:    true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName:  true,
+          serviceDate:   true,
+          familyContact: true,
+          contactEmail:  true,
+          venueName:     true,
+          venueAddress:  true,
+        },
+      },
     },
   });
 
@@ -361,9 +425,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: 'Memorial' };
   }
 
+  const resolved = resolveMemorialFields(memorial);
+
   const name =
     memorial.preferredName ??
-    [memorial.firstName, memorial.lastName].filter(Boolean).join(' ') ??
+    [resolved.firstName, resolved.lastName].filter(Boolean).join(' ') ??
     'Memorial';
 
   if (

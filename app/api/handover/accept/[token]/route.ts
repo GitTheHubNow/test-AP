@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma';
 import { HandoverStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
 import { ensurePublicToken } from '@/lib/qr';
+import { grantFamilyAccess } from '@/lib/familyAccess';
 import {
   sendHandoverAcceptedToFH,
   sendHandoverAcceptedToFamily,
@@ -229,6 +230,19 @@ export async function POST(
           slug:              handover.memorial.slug ?? handover.memorialId,
           publicToken,
         });
+      }
+
+      // ADDED — automatically grant family self-service access at the
+      // same moment ownership transfers, rather than relying on a
+      // manual staff button that may be unreachable once staff access
+      // to this memorial ends (see the "Your access to manage it has
+      // ended" copy in components/handover/HandoverWorkspace.tsx).
+      // See app/api/memorial/[memorialId]/handover/family-access/route.ts
+      // for the shared grantFamilyAccess() this calls — same function
+      // the manual "resend" button there uses to reissue a lost token.
+      const grantResult = await grantFamilyAccess(handover.memorialId, userId, ActorRole.FAMILY);
+      if (!grantResult.ok) {
+        console.error('[handover/accept] auto family-access grant failed:', grantResult.error);
       }
     } catch (emailErr) {
       // Never fail the handover response because of an email issue

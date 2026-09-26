@@ -6,6 +6,13 @@ import { renderSendAfterDaysEmail } from '@/lib/email-templates/automation-email
 import { clerkClient } from '@clerk/nextjs/server';
 import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
 import { randomUUID } from 'crypto';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
+
+// PRIORITY 3 FIX: nominatedEmail used to be read straight off Memorial.
+// For a case-linked memorial the current family contact lives on the
+// case (Memorial.nominatedEmail can go stale once staff stop editing it
+// directly) — a stale value here means this job shares the memorial
+// link with someone who is no longer the right contact.
 
 /**
  * job-send-after-days.ts
@@ -36,11 +43,19 @@ export async function runSendAfterDaysJob(): Promise<{
   // Find candidates — memorials where the trigger date has passed
   const candidates = await prisma.memorial.findMany({
     where: {
-      status:         MemorialStatus.ACTIVE,
-      autoSentAt:     null,
-      nominatedEmail: { not: null },
-      sendAfterDays:  { not: null },
-      deathDate:      { not: null },
+      status:        MemorialStatus.ACTIVE,
+      autoSentAt:    null,
+      sendAfterDays: { not: null },
+      deathDate:     { not: null },
+      // Widened so a case-linked memorial with nominatedEmail: null on
+      // its own column (but a real contactEmail on the case) isn't
+      // silently skipped. deathDate is NOT a case-resolved field (see
+      // resolveMemorialFields.ts field list), so it stays a plain
+      // not-null check above rather than part of the OR.
+      OR: [
+        { nominatedEmail: { not: null } },
+        { funeralCase: { contactEmail: { not: null } } },
+      ],
     },
     select: {
       id:             true,
@@ -52,6 +67,23 @@ export async function runSendAfterDaysJob(): Promise<{
       qrTokenHash:    true,
       slug:           true,
       publicToken:    true,
+      // Needed only to resolve nominatedEmail via resolveMemorialFields
+      // when this memorial is case-linked. firstName/lastName/funeralDate/
+      // venueName/venueAddress/nominatedName aren't otherwise used by
+      // this job, but the resolver requires the full field set.
+      firstName:      true,
+      lastName:       true,
+      nominatedName:  true,
+      funeralDate:    true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
     },
   });
 
@@ -59,6 +91,9 @@ export async function runSendAfterDaysJob(): Promise<{
 
   for (const memorial of candidates) {
     try {
+      const resolvedEmail = resolveMemorialFields(memorial).nominatedEmail;
+      if (!resolvedEmail) continue; // widened OR above can admit a row with no usable email either side
+
       // Check if trigger date has passed
       const triggerDate = new Date(memorial.deathDate!);
       triggerDate.setDate(triggerDate.getDate() + memorial.sendAfterDays!);
@@ -122,7 +157,7 @@ export async function runSendAfterDaysJob(): Promise<{
       });
 
       await sendEmailAsync({
-        to:      memorial.nominatedEmail!,
+        to:      resolvedEmail,
         subject: `A memorial has been shared with you — ${memorial.title}`,
         html,
       });
@@ -142,12 +177,12 @@ export async function runSendAfterDaysJob(): Promise<{
           actorId:    'SYSTEM',
           actorRole:  ActorRole.SYSTEM,
           reasonCode: ReasonCode.AUTOMATION,
-          metadata:   { nominatedEmail: memorial.nominatedEmail, sendAfterDays: memorial.sendAfterDays },
+          metadata:   { nominatedEmail: resolvedEmail, sendAfterDays: memorial.sendAfterDays },
         },
       });
 
       sent++;
-      console.log(`[sendAfterDays] Sent for memorial ${memorial.id} to ${memorial.nominatedEmail}`);
+      console.log(`[sendAfterDays] Sent for memorial ${memorial.id} to ${resolvedEmail}`);
 
     } catch (err) {
       const msg = `Memorial ${memorial.id}: ${err instanceof Error ? err.message : String(err)}`;

@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CollectionWorkspace } from '@/components/collection/CollectionWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
@@ -33,6 +34,17 @@ export default async function CollectionPage({ params }: Props) {
       funeralDate:    true,
       workflowStage:  true,
       collectionNotes: true,
+      nominatedName:  true,
+      nominatedEmail: true,
+      venueName:      true,
+      venueAddress:   true,
+      funeralCase: {
+        select: {
+          deceasedName: true, serviceDate: true,
+          familyContact: true, contactEmail: true,
+          venueName: true, venueAddress: true,
+        },
+      },
       collectionItems: {
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
         select: {
@@ -72,6 +84,8 @@ export default async function CollectionPage({ params }: Props) {
 
   if (!memorial) notFound();
 
+  const resolved = resolveMemorialFields(memorial);
+
   // Compute counts for the header chips
   const counts = {
     total:    memorial.collectionItems.length,
@@ -88,9 +102,9 @@ export default async function CollectionPage({ params }: Props) {
       memorial={{
         id:             memorial.id,
         title:          memorial.title,
-        firstName:      memorial.firstName,
-        lastName:       memorial.lastName,
-        funeralDate:    memorial.funeralDate?.toISOString() ?? null,
+        firstName:      resolved.firstName,
+        lastName:       resolved.lastName,
+        funeralDate:    resolved.funeralDate?.toISOString() ?? null,
         workflowStage:  memorial.workflowStage,
         collectionNotes: memorial.collectionNotes,
       }}

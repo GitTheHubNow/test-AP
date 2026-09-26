@@ -17,6 +17,7 @@ import { handleAuthError } from '@/lib/errors';
 import { sendEmailAsync, getAppUrl } from '@/lib/email';
 import { ensurePublicToken } from '@/lib/qr';
 import { renderProductOrderEmail } from '@/lib/email-templates/product-order-email';
+import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,22 @@ export async function POST(
           select: {
             firstName: true, lastName: true, preferredName: true, title: true,
             funeralDate: true, slug: true, publicToken: true,
+            // PRIORITY 3 FIX: this builds the name/date that goes into a
+            // real fulfilment/production order email — e.g. an engraved
+            // plaque — so a stale value here isn't just a display bug,
+            // it's the wrong name or date going to whoever is physically
+            // making the item. Resolve via the linked case below.
+            nominatedName:  true,
+            nominatedEmail: true,
+            venueName:      true,
+            venueAddress:   true,
+            funeralCase: {
+              select: {
+                deceasedName: true, serviceDate: true,
+                familyContact: true, contactEmail: true,
+                venueName: true, venueAddress: true,
+              },
+            },
           },
         }),
         prisma.funeralCase.findUnique({
@@ -153,9 +170,11 @@ export async function POST(
           : Promise.resolve(null),
       ]);
 
+      const resolved = memorial ? resolveMemorialFields(memorial) : null;
+
       const deceasedName =
         memorial?.preferredName ||
-        [memorial?.firstName, memorial?.lastName].filter(Boolean).join(' ') ||
+        [resolved?.firstName, resolved?.lastName].filter(Boolean).join(' ') ||
         memorial?.title ||
         'Unknown';
 
@@ -167,8 +186,8 @@ export async function POST(
         quantity,
         specifications:   (body.specifications as Record<string, unknown>) ?? null,
         requestNotes:     body.requestNotes ?? null,
-        serviceDate:      memorial?.funeralDate
-          ? memorial.funeralDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+        serviceDate:      resolved?.funeralDate
+          ? resolved.funeralDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
           : null,
         // FIXED: previously built the retired /m/{id} URL, copied from the
         // now-fixed QR generation page (app/dashboard/memorial/

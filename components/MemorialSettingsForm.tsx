@@ -25,6 +25,16 @@ interface MemorialSettingsFormProps {
   initialData: InitialData;
   /** If true, all inputs are disabled and save is hidden */
   isLocked: boolean;
+  /**
+   * If true, this memorial is linked to a FuneralCase, which is now
+   * the source of truth for firstName/lastName (see
+   * lib/memorial/resolveMemorialFields.ts — Priority 3 of the product
+   * roadmap: no more two independently-editable copies of the
+   * deceased's name). Only locks the name fields, not the whole form —
+   * birthDate/deathDate/description aren't case-owned fields and stay
+   * editable here regardless.
+   */
+  isCaseLinked: boolean;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -33,6 +43,7 @@ export function MemorialSettingsForm({
   memorialId,
   initialData,
   isLocked,
+  isCaseLinked,
 }: MemorialSettingsFormProps) {
   const router = useRouter();
 
@@ -61,8 +72,16 @@ export function MemorialSettingsForm({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName:   form.firstName  || undefined,
-          lastName:    form.lastName   || undefined,
+          // firstName/lastName omitted entirely when case-linked —
+          // this is client-side convenience only (matches the disabled
+          // inputs above); the real enforcement is server-side, in the
+          // PATCH /api/memorial/[memorialId] route itself, which
+          // ignores these fields for a case-linked memorial regardless
+          // of what a request body contains.
+          ...(isCaseLinked ? {} : {
+            firstName: form.firstName || undefined,
+            lastName:  form.lastName  || undefined,
+          }),
           birthDate:   form.birthDate  || null,
           deathDate:   form.deathDate  || null,
           description: form.description || null,
@@ -111,10 +130,15 @@ export function MemorialSettingsForm({
             type="text"
             value={form.firstName}
             onChange={handleChange}
-            disabled={isLocked}
+            disabled={isLocked || isCaseLinked}
             placeholder="First name"
             className={inputBase}
           />
+          {isCaseLinked && !isLocked && (
+            <p className="mt-1 text-xs text-gray-500">
+              Linked to a case — edit the deceased&rsquo;s name from the case instead.
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="lastName" className={labelBase}>
@@ -126,7 +150,7 @@ export function MemorialSettingsForm({
             type="text"
             value={form.lastName}
             onChange={handleChange}
-            disabled={isLocked}
+            disabled={isLocked || isCaseLinked}
             placeholder="Last name"
             className={inputBase}
           />
