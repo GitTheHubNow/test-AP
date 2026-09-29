@@ -26,7 +26,7 @@ export function TrialSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
 
   // Local editable copies — only pushed to the server on explicit Save,
   // so the admin can type a new value without every keystroke firing a
@@ -61,6 +61,17 @@ export function TrialSettingsPanel() {
     load();
   }, []);
 
+  // Hide the "Saved" indicator 3s after a successful save. Previously this
+  // was derived inline during render as `Date.now() - savedAt < 3000`,
+  // which only re-evaluates when something else happens to trigger a
+  // re-render — with no such trigger, "Saved" could stay on screen
+  // indefinitely instead of fading after 3 seconds.
+  useEffect(() => {
+    if (!showSaved) return;
+    const timer = setTimeout(() => setShowSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [showSaved]);
+
   const handleSave = async () => {
     const parsedDays = parseInt(trialDaysInput, 10);
     if (!Number.isInteger(parsedDays) || parsedDays < 0 || parsedDays > 365) {
@@ -89,7 +100,7 @@ export function TrialSettingsPanel() {
 
       const json = await res.json();
       setSettings(json.data);
-      setSavedAt(Date.now());
+      setShowSaved(true);
     } catch {
       setError('Failed to save settings');
     } finally {
@@ -176,7 +187,7 @@ export function TrialSettingsPanel() {
           >
             {saving ? 'Saving…' : 'Save changes'}
           </button>
-          {savedAt && Date.now() - savedAt < 3000 && (
+          {showSaved && (
             <span className="text-sm text-green-600">Saved</span>
           )}
         </div>

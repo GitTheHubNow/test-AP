@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { CollectionItemType, CollectionItemStatus, CollectionInviteStatus, MemoryCategory } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
-import { writeFile, mkdir } from 'fs/promises';
-import { join, extname } from 'path';
-import { randomUUID } from 'crypto';
-import { format } from 'date-fns';
+import { extname } from 'path';
 import { verifyFileContent } from '@/lib/file-validation';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
+import { saveUploadedFile } from '@/lib/storage-server';
 
 /**
  * POST /api/collect/[token]
@@ -134,9 +132,10 @@ export async function POST(
 
     // Extension allowlist — defense in depth. extname() only extracts an
     // extension (it can't itself introduce a path-traversal segment since
-    // we generate the actual on-disk filename with randomUUID(), not from
-    // user input), but rejecting unexpected extensions up front is a
-    // cheap extra layer against malformed/unusual filenames.
+    // saveUploadedFile() below generates the actual storage key with
+    // randomUUID(), not from user input), but rejecting unexpected
+    // extensions up front is a cheap extra layer against malformed/unusual
+    // filenames.
     const ALLOWED_EXTS = [
       '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif',
       '.mp4', '.mov', '.avi', '.webm',
@@ -147,28 +146,27 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Invalid file extension' }, { status: 400 });
     }
 
-    const ext       = declaredExt || `.${file.type.split('/')[1]}`;
-    const dateDir   = format(new Date(), 'yyyy/MM');
-    const filename  = `${randomUUID()}${ext}`;
-    const uploadDir = join(process.cwd(), 'public', 'uploads', dateDir);
-
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // Magic-byte check — verify the file's actual content matches its
     // declared type, rather than trusting the client-supplied
     // Content-Type header alone. See lib/file-validation.ts for why this
-    // matters: uploads are written into public/uploads/** and served
-    // directly by Next.js, so a mislabeled file is a stored XSS risk
-    // against anyone who opens the link, not just a data-integrity issue.
+    // matters: uploads are served directly by URL (via S3/R2 in
+    // production, public/uploads/** in dev), so a mislabeled file is a
+    // stored XSS risk against anyone who opens the link, not just a
+    // data-integrity issue.
     const contentCheck = verifyFileContent(buffer, file.type);
     if (!contentCheck.valid) {
       return NextResponse.json({ success: false, error: contentCheck.reason }, { status: 400 });
     }
 
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(join(uploadDir, filename), buffer);
-
-    blobKey   = `${dateDir}/${filename}`;
+    // Was writing straight to public/uploads/** via fs.writeFile/mkdir,
+    // which only works against local disk — Vercel's Node functions have
+    // a read-only filesystem outside of /tmp, so every upload through this
+    // route would fail in production. saveUploadedFile() branches to S3/R2
+    // in production and disk in dev, same as the other upload routes
+    // (api/upload/[token], api/family-access/[memorialId]/details).
+    blobKey   = await saveUploadedFile(file, `collection/${invite.memorialId}`);
     mimeType  = file.type;
     sizeBytes = file.size;
   }

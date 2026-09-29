@@ -1,11 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import {
-  EntityType,
-  AuditAction,
-  ActorRole,
-  ReasonCode,import { prisma } from '@/lib/prisma';
-import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
-import { auditMemorialRead, getMemorialReadLog } from '@/lib/auditRead';
+import { EntityType, AuditAction, ActorRole, ReasonCode, getAuditEvents } from '@/lib/audit';
+import { auditMemorialRead, getMemorialReadLog, getMemorialReadStats } from '@/lib/auditRead';
 import { MemorialStatus } from '@prisma/client';
 
 describe('Read Audit API Integration (Day 4)', () => {
@@ -129,14 +124,6 @@ describe('Read Audit API Integration (Day 4)', () => {
     expect(event.action).toBe(AuditAction.READ);
   });
 });
-  getAuditEvents,
-} from '@/lib/audit';
-import {
-  auditMemorialRead,
-  getMemorialReadLog,
-  getMemorialReadStats,
-} from '@/lib/auditRead';
-import { MemorialStatus } from '@prisma/client';
 
 describe('Audit on Reads (Day 4)', () => {
   let testMemorialId: string;

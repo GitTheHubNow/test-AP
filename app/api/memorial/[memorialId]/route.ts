@@ -69,11 +69,33 @@ export async function PATCH(
     // pull the case's own fields here.
     const existing = await prisma.memorial.findUnique({
       where:  { id: memorialId },
-      select: { funeralCase: { select: { id: true } } },
+      select: { sealed: true, status: true, funeralCase: { select: { id: true } } },
     });
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Memorial not found' }, { status: 404 });
     }
+
+    // Sealed/archived memorials are meant to be immutable — the settings
+    // form (components/MemorialSettingsForm.tsx) already disables every
+    // input and blocks its own submit handler when
+    // isLocked = memorial.sealed || status === 'ARCHIVED', but that was
+    // client-side convenience only: this route itself never checked
+    // `sealed`, so a direct API call could silently rewrite a sealed
+    // memorial's name/dates/description with no correction record, and
+    // no error telling the caller why. This is the actual enforcement
+    // boundary the UI lock was assuming already existed.
+    if (existing.sealed || existing.status === 'ARCHIVED') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: existing.sealed
+            ? 'This memorial is sealed and its details can no longer be edited.'
+            : 'This memorial is archived and can no longer be edited.',
+        },
+        { status: 409 },
+      );
+    }
+
     const isCaseLinked = Boolean(existing.funeralCase);
 
     if (isCaseLinked && (firstName !== undefined || lastName !== undefined)) {

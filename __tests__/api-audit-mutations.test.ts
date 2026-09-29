@@ -80,7 +80,7 @@ describe('API Mutation Audit Integration (Day 3)', () => {
 
       await tx.auditEvent.create({
         data: {
-          entityType: EntityType.MEMORY
+          entityType: EntityType.MEMORY,
           entityId: memory.id,
           action: AuditAction.APPROVE,
           actorId: testUserId,

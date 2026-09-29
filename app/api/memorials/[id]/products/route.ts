@@ -11,7 +11,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 import { Prisma }                     from '@prisma/client';
-import { assertMemorialAccess, assertFeatureEnabled, getOrgIdForUser } from '@/lib/tenant';
+import { assertFeatureEnabled, getOrgIdForUser } from '@/lib/tenant';
+// Role-aware access check. Was importing assertMemorialAccess from
+// '@/lib/tenant' (org-membership only, no role check) — a VIEWER-role org
+// member could create/list product requests for any memorial in the org.
+// This checker enforces VIEWER=read-only / MEMBER=own-memorials-only /
+// ADMIN+OWNER=full access, and throws (rather than returning null) on
+// failure, matching the existing try/catch + handleAuthError below.
+import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { VALID_PRODUCT_TYPES } from '@/lib/products/transitions';
 import { handleAuthError } from '@/lib/errors';
 import { sendEmailAsync, getAppUrl } from '@/lib/email';
@@ -33,10 +40,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    const memorial = await assertMemorialAccess(id, userId);
-    if (!memorial) {
-      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
-    }
+    await assertMemorialAccess(id, userId, 'read');
 
     await assertFeatureEnabled(userId, 'products');
 
@@ -80,10 +84,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    const memorial = await assertMemorialAccess(id, userId);
-    if (!memorial) {
-      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
-    }
+    await assertMemorialAccess(id, userId, 'edit');
 
     await assertFeatureEnabled(userId, 'products');
 

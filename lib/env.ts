@@ -76,18 +76,25 @@ const EnvSchema = z.object({
   // validated as required.
   PLATFORM_ADMIN_USER_IDS: z.string().optional(),
 
-  // AWS/S3 — production-only. See class-level comment above.
+  // AWS/S3 (Cloudflare R2) — production-only. See class-level comment above.
   AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
   AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   AWS_REGION: z.string().min(1).optional(),
   AWS_S3_BUCKET: z.string().min(1).optional(),
+  // lib/storage-s3.ts builds the R2 endpoint as
+  // `https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com`. This was
+  // referenced there (and in scripts/check-ffmpeg-core.ts) but never
+  // added to this schema, so a missing value wouldn't fail boot — it
+  // would boot cleanly and then every upload/signed-URL call would fail
+  // at request time trying to resolve "undefined.r2.cloudflarestorage.com".
+  CF_ACCOUNT_ID: z.string().min(1).optional(),
 }).refine(
   (env) => {
     if (env.NODE_ENV !== 'production') return true;
-    return !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_S3_BUCKET);
+    return !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_S3_BUCKET && env.CF_ACCOUNT_ID);
   },
   {
-    message: 'AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET are required when NODE_ENV=production (lib/storage-server.ts uses S3 in production, local disk otherwise)',
+    message: 'AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, and CF_ACCOUNT_ID are required when NODE_ENV=production (lib/storage-server.ts uses S3/R2 in production, local disk otherwise)',
     path: ['AWS_S3_BUCKET'],
   },
 );

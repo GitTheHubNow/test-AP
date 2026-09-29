@@ -16,25 +16,26 @@ interface UpdateSettingsRequest {
 /**
  * PATCH /api/memorial/[memorialId]/settings
  *
- * ⚠️ DEAD ROUTE — not called by anything reachable in the app (re-confirmed
- * during the RBAC sweep — still no callers). The real Settings page
- * (app/dashboard/memorial/[memorialId]/settings/page.tsx) uses
- * components/MemorialSettingsForm.tsx, which calls
- * PATCH /api/memorial/[memorialId] instead (the main memorial route,
- * already fixed in the same sweep). This file's own frontend counterpart —
- * components/MemorialSettings.tsx — is also unimported/unreachable.
+ * NOTE: despite the comment that used to be here, this route is NOT dead —
+ * components/memorial/CreatePetMemorialForm.tsx calls it right after
+ * creating a pet memorial, to set `description` (which POST /api/memorial
+ * doesn't accept at creation time). Whoever wrote the "dead route" comment
+ * checked MemorialSettingsForm.tsx and MemorialSettings.tsx (both of which
+ * really are unreachable/superseded by PATCH /api/memorial/[memorialId])
+ * but missed this caller.
  *
- * This file used three field names that don't exist on Memorial
+ * This file previously used three field names that don't exist on Memorial
  * (dateOfBirth/dateOfDeath/biography instead of the real
- * birthDate/deathDate/description) and a select missing firstName/
- * lastName needed further down — would have thrown on every real call.
- * Fixed to be correct rather than left as a broken, unreachable
- * duplicate, per the same approach used for the /delete route.
+ * birthDate/deathDate/description) and a select missing firstName/lastName
+ * needed further down — already fixed to the field names used below.
+ *
+ * Also previously missing the sealed/archived immutability check that
+ * PATCH /api/memorial/[memorialId] has — added below, same reasoning: a
+ * sealed memorial should not be editable via any route, not just the one
+ * the settings-page UI happens to use.
  *
  * Update memorial settings
- * Org-scoped edit access via assertMemorialAccess (previously a manual
- * ownerId check — fixed as part of the same sweep, for consistency, even
- * though nothing currently calls this route).
+ * Org-scoped edit access via assertMemorialAccess.
  *
  * Phase 3A - Feature 4
  */
@@ -62,14 +63,29 @@ export async function PATCH(
       where: { id: memorialId },
       // firstName/lastName needed below when only one of the two is being
       // updated — the title needs to be rebuilt from both, even the one
-      // that isn't changing.
-      select: { firstName: true, lastName: true },
+      // that isn't changing. sealed/status needed for the immutability
+      // check below.
+      select: { firstName: true, lastName: true, sealed: true, status: true },
     });
 
     if (!memorial) {
       return NextResponse.json(
         { success: false, error: 'Memorial not found' },
         { status: 404 }
+      );
+    }
+
+    // Sealed/archived memorials are immutable — see the identical check
+    // (and longer explanation) in PATCH /api/memorial/[memorialId].
+    if (memorial.sealed || memorial.status === 'ARCHIVED') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: memorial.sealed
+            ? 'This memorial is sealed and its details can no longer be edited.'
+            : 'This memorial is archived and can no longer be edited.',
+        },
+        { status: 409 },
       );
     }
 

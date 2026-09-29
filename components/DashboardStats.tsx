@@ -29,10 +29,6 @@ export function DashboardStats({ memorialId }: DashboardStatsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchStats();
-  }, [memorialId]);
-
   const fetchStats = async () => {
     try {
       setLoading(true);
@@ -53,6 +49,10 @@ export function DashboardStats({ memorialId }: DashboardStatsProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchStats();
+  }, [memorialId]);
 
   if (loading) {
     return (

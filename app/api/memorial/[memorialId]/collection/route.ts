@@ -3,14 +3,11 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CollectionItemType, CollectionItemStatus, MemoryCategory } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
-import { writeFile, mkdir } from 'fs/promises';
-import { join, extname } from 'path';
-import { randomUUID } from 'crypto';
-import { format } from 'date-fns';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
 import { verifyFileContent } from '@/lib/file-validation';
 import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
+import { saveUploadedFile } from '@/lib/storage-server';
 
 /**
  * POST /api/memorial/[memorialId]/collection
@@ -120,12 +117,6 @@ export async function POST(
       );
     }
 
-    // Save file
-    const ext       = extname(file.name) || `.${file.type.split('/')[1]}`;
-    const dateDir   = format(new Date(), 'yyyy/MM');
-    const filename  = `${randomUUID()}${ext}`;
-    const uploadDir = join(process.cwd(), 'public', 'uploads', dateDir);
-
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // Magic-byte check — same fix as the public collect/[token] route.
@@ -133,19 +124,22 @@ export async function POST(
     // that only proves who is uploading, not what they're uploading —
     // a compromised or malicious staff account (or a legitimate one
     // fooled into uploading a mislabeled file) could still push a
-    // payload with a spoofed Content-Type. Files here land in the same
-    // publicly-served public/uploads/** tree as the public route, so
-    // the stored-XSS risk from trusting file.type alone is identical
-    // regardless of which route the file came in through.
+    // payload with a spoofed Content-Type. Files here are served the
+    // same way as the public route, so the stored-XSS risk from trusting
+    // file.type alone is identical regardless of which route the file
+    // came in through.
     const contentCheck = verifyFileContent(buffer, file.type);
     if (!contentCheck.valid) {
       return NextResponse.json({ success: false, error: contentCheck.reason }, { status: 400 });
     }
 
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(join(uploadDir, filename), buffer);
-
-    blobKey   = `${dateDir}/${filename}`;
+    // Was writing straight to public/uploads/** via fs.writeFile/mkdir,
+    // which only works against local disk — Vercel's Node functions have
+    // a read-only filesystem outside of /tmp, so every staff upload
+    // through this route would fail in production. saveUploadedFile()
+    // branches to S3/R2 in production and disk in dev, same as the
+    // public collect/[token] route (same fix, applied there too).
+    blobKey   = await saveUploadedFile(file, `collection/${memorialId}`);
     mimeType  = file.type;
     sizeBytes = file.size;
 

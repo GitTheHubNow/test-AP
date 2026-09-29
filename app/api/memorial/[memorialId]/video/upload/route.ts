@@ -6,8 +6,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 import { saveUploadedFile }           from '@/lib/storage-server';
-// ── ADDED: proper org ownership check ───────────────────────────────────────
-import { assertMemorialAccess }       from '@/lib/tenant';
+// ── Role-aware org access check. Was importing assertMemorialAccess from
+// '@/lib/tenant' — that version only checks org membership (any role
+// passes), unlike this one, which enforces VIEWER=read-only /
+// MEMBER=own-memorials-only / ADMIN+OWNER=full access. Nearly every other
+// memorial route was migrated to this V2 checker; this route was missed,
+// so a VIEWER-role org member could upload/replace any memorial's tribute
+// video. ──────────────────────────────────────────────────────────────────
+import { assertMemorialAccess }       from '@/lib/auth/getOrgForUser';
+import { handleAuthError }            from '@/lib/errors';
 // ────────────────────────────────────────────────────────────────────────────
 import { verifyFileContent }          from '@/lib/file-validation';
 import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
@@ -54,9 +61,14 @@ export async function POST(
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-    // ── CHANGED: org-aware ownership check (was: findFirst with no user check)
-    const memorial = await assertMemorialAccess(memorialId, userId);
-    if (!memorial) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // ── V2 access check: 'edit' means VIEWER is rejected and MEMBER can
+    // only touch memorials they own — throws (caught below) rather than
+    // returning null.
+    try {
+      await assertMemorialAccess(memorialId, userId, 'edit');
+    } catch (err) {
+      return handleAuthError(err);
+    }
     // ────────────────────────────────────────────────────────────────────────
 
     const formData = await req.formData();

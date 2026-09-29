@@ -72,11 +72,12 @@ export function SlideshowPlayer({
   const [musicReady, setMusicReady]     = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
+  const [kbIndex, setKbIndex]   = useState(0);
+
   const containerRef  = useRef<HTMLDivElement>(null);
   const audioRef      = useRef<HTMLAudioElement>(null);
   const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const kbIndex       = useRef(0);
 
   // Detect prefers-reduced-motion
   useEffect(() => {
@@ -132,11 +133,8 @@ export function SlideshowPlayer({
   const advance = useCallback((dir: 1 | -1 = 1) => {
     if (photos.length === 0) return;
     clearTimer();
-    setCurrent(prev => {
-      const n = (prev + dir + photos.length) % photos.length;
-      kbIndex.current = (kbIndex.current + 1) % KB_DIRECTIONS.length;
-      return n;
-    });
+    setCurrent(prev => (prev + dir + photos.length) % photos.length);
+    setKbIndex(i => (i + 1) % KB_DIRECTIONS.length);
   }, [photos.length, clearTimer]);
 
   // Schedule next advance when playing
@@ -270,7 +268,7 @@ export function SlideshowPlayer({
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const photo      = photos[current];
-  const kbName     = KB_DIRECTIONS[kbIndex.current % KB_DIRECTIONS.length];
+  const kbName     = KB_DIRECTIONS[kbIndex % KB_DIRECTIONS.length];
   const photoDur   = (photo.tributeDuration ?? DEFAULT_DURATION);
   const useKB      = !reducedMotion;
 

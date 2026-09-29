@@ -19,10 +19,6 @@ export function QRCodeDisplay({ memorialId, memorialTitle }: QRCodeDisplayProps)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchQRCode();
-  }, [memorialId]);
-
   const fetchQRCode = async () => {
     try {
       setLoading(true);
@@ -43,6 +39,10 @@ export function QRCodeDisplay({ memorialId, memorialTitle }: QRCodeDisplayProps)
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchQRCode();
+  }, [memorialId]);
 
   const handleDownload = () => {
     if (!qrDataUrl) return;

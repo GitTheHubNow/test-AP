@@ -298,7 +298,7 @@ export function BrandingForm() {
           {/* Logo */}
           <div style={s.field}>
             <label style={s.label}>Logo</label>
-            <p style={s.hint}>PNG, JPEG, SVG, or WebP. Max 2 MB. Displayed at max 40px height.</p>
+            <p style={s.hint}>PNG, JPEG, or WebP. Max 2 MB. Displayed at max 40px height.</p>
 
             {logoUrl && (
               <div style={s.logoPreviewWrap}>
@@ -316,7 +316,7 @@ export function BrandingForm() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              accept="image/png,image/jpeg,image/webp"
               style={{ display: 'none' }}
               onChange={e => {
                 const f = e.target.files?.[0];

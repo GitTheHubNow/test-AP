@@ -13,7 +13,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { assertMemorialAccess, assertFeatureEnabled } from '@/lib/tenant';
+// Role-aware access check that THROWS on failure. Was importing
+// assertMemorialAccess from '@/lib/tenant', which instead RETURNS null on
+// failure — and both handlers below called it as a bare `await
+// assertMemorialAccess(id, userId);` with the result never checked. That
+// made it a complete no-op: any authenticated user (from any org, as long
+// as their own org had the 'products' feature flag) could edit or delete
+// product requests belonging to any other org's memorials, not merely a
+// VIEWER-role gap. This version throws (caught by the existing try/catch
+// below) instead of returning a value that can be silently ignored.
+import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+import { assertFeatureEnabled } from '@/lib/tenant';
 import { handleAuthError } from '@/lib/errors';
 
 type Params = { params: Promise<{ id: string; requestId: string }> };
@@ -29,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    await assertMemorialAccess(id, userId);
+    await assertMemorialAccess(id, userId, 'edit');
     await assertFeatureEnabled(userId, 'products');
 
     // Verify the request belongs to this memorial
@@ -70,7 +80,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
     }
 
-    await assertMemorialAccess(id, userId);
+    await assertMemorialAccess(id, userId, 'delete');
     await assertFeatureEnabled(userId, 'products');
 
     const existing = await prisma.productRequest.findFirst({

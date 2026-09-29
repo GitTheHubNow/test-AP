@@ -59,6 +59,11 @@ export const ActorRole = {
   // audit_events.actorRole (a plain String column, so no runtime error —
   // this only surfaces under `tsc`/`next build`, not `next dev`).
   FUNERAL_HOME: 'FUNERAL_HOME',
+  // Referenced by __tests__/audit.test.ts's "should handle different actor
+  // roles" test before this fix — same underlying issue as FUNERAL_HOME
+  // above. A cemetery operator acting on a memorial/case independently of
+  // the funeral home that created it.
+  CEMETERY: 'CEMETERY',
 } as const;
 
 export const ReasonCode = {
@@ -87,6 +92,14 @@ export const ReasonCode = {
   // issue as ActorRole.FUNERAL_HOME above. Used when a correction is made
   // to previously-recorded (but not yet sealed) content.
   CORRECTION:  'CORRECTION',
+  // Referenced by lib/auditRead.ts callers (auditMemorialRead) and by
+  // __tests__/audit-reads.test.ts, audit.test.ts, day7-integration.test.ts
+  // before this fix — same underlying issue as CORRECTION above. Cover a
+  // memorial-page READ event by an anonymous visitor vs. a signed-in family
+  // member respectively; distinct from FAMILY_SELF_SERVICE, which is a
+  // family WRITE action, not a read.
+  PUBLIC_ACCESS: 'PUBLIC_ACCESS',
+  FAMILY_ACCESS: 'FAMILY_ACCESS',
 } as const;
 
 import { prisma } from '@/lib/prisma';
@@ -107,6 +120,43 @@ export async function getAuditEvents(entityType: EntityType, entityId: string) {
     where:   { entityType, entityId },
     orderBy: { timestamp: 'asc' },
   });
+}
+
+/**
+ * Create a single audit event.
+ *
+ * Added because __tests__/audit.test.ts and audit-creation.test.ts both
+ * imported this from here and called it, but — same underlying issue as
+ * getAuditEvents above — it was never actually defined. This is just the
+ * write-side counterpart: every API route already inlines this exact
+ * `prisma.auditEvent.create({ data: {...} })` shape directly, so this
+ * gives tests (and any future route that wants it) a shared helper for it.
+ */
+export async function createAuditEvent(data: {
+  entityType: EntityType;
+  entityId:   string;
+  action:     AuditAction;
+  actorId:    string;
+  actorRole:  ActorRole;
+  reasonCode: ReasonCode;
+  metadata?:  object;
+}) {
+  return prisma.auditEvent.create({ data });
+}
+
+/**
+ * Check whether an entity has a CREATE audit event on record.
+ *
+ * Added because __tests__/audit-creation.test.ts and
+ * api-audit-integration.test.ts both imported this from here and called
+ * it, but it was never actually defined — same underlying issue as
+ * getAuditEvents above.
+ */
+export async function verifyCreationAudit(entityType: EntityType, entityId: string): Promise<boolean> {
+  const count = await prisma.auditEvent.count({
+    where: { entityType, entityId, action: AuditAction.CREATE },
+  });
+  return count > 0;
 }
 
 export type EntityType  = typeof EntityType[keyof typeof EntityType];

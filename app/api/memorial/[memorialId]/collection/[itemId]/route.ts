@@ -3,8 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CollectionItemStatus, MemoryCategory, MemoryStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
-import { unlink } from 'fs/promises';
-import { join } from 'path';
+import { deleteFile } from '@/lib/storage-server';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
 
@@ -276,10 +275,14 @@ export async function DELETE(
       });
     });
 
-    // Delete file from disk (best-effort — don't fail the request if missing)
+    // Delete the stored file (best-effort — don't fail the request if
+    // missing). Was unlink()ing from local public/uploads even in
+    // production, where files live in R2 — so deleting an item would
+    // have left its file orphaned in the bucket, still reachable by URL.
+    // deleteFile() branches to R2 in production and disk in dev.
     if (item.blobKey) {
       try {
-        await unlink(join(process.cwd(), 'public', 'uploads', item.blobKey));
+        await deleteFile(item.blobKey);
       } catch {
         console.warn('[Collection] Could not delete file:', item.blobKey);
       }

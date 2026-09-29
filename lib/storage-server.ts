@@ -81,10 +81,36 @@ async function deleteFromDisk(blobKey: string): Promise<void> {
 
 function getExtension(filename: string, mimeType: string): string {
   const lower = filename.toLowerCase();
+
+  // Images
   if (lower.endsWith('.heic') || mimeType === 'image/heic') return '.heic';
   if (lower.endsWith('.heif') || mimeType === 'image/heif') return '.heif';
   if (lower.endsWith('.webp') || mimeType === 'image/webp') return '.webp';
   if (lower.endsWith('.png')  || mimeType === 'image/png')  return '.png';
   if (lower.endsWith('.gif')  || mimeType === 'image/gif')  return '.gif';
+  // SVG was previously unhandled here — fell through to '.jpg' — even
+  // though nothing currently sends image/svg+xml into saveUploadedFile
+  // (see the logo route fix, which removed SVG uploads entirely), this
+  // is still the correct general behaviour for the function.
+  if (lower.endsWith('.svg')  || mimeType === 'image/svg+xml') return '.svg';
+
+  // Video — was entirely unhandled: every video saved via
+  // saveUploadedFile() (tribute videos, collection video uploads) fell
+  // through to '.jpg' too. In production this is masked because
+  // storage-s3.ts sets the real Content-Type from file.type regardless
+  // of the key's extension, but in local dev the file is served from
+  // disk by extension, so a video saved as "<uuid>.jpg" would be served
+  // as Content-Type: image/jpeg and fail to play in a <video> tag.
+  if (lower.endsWith('.mp4')  || mimeType === 'video/mp4')        return '.mp4';
+  if (lower.endsWith('.mov')  || mimeType === 'video/quicktime')  return '.mov';
+  if (lower.endsWith('.webm') || mimeType === 'video/webm')       return '.webm';
+  if (lower.endsWith('.avi')  || mimeType === 'video/x-msvideo') return '.avi';
+
+  // Documents — same fall-through-to-.jpg issue for the DOCUMENT type
+  // accepted by the collection upload routes.
+  if (lower.endsWith('.pdf')  || mimeType === 'application/pdf') return '.pdf';
+  if (lower.endsWith('.docx') || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '.docx';
+  if (lower.endsWith('.doc')  || mimeType === 'application/msword') return '.doc';
+
   return '.jpg';
 }

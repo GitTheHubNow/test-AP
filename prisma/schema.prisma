@@ -13,7 +13,13 @@
 // Phase 17: White-label foundations + QR lifecycle + ProductRequest
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" = whatever machine runs `prisma generate` (your dev box);
+  // "rhel-openssl-3.0.x" = Vercel's serverless runtime (Amazon Linux).
+  // Without the second entry, a build made on Windows/macOS and uploaded
+  // with `vercel deploy --prebuilt` ships the wrong query engine and
+  // every database call fails at runtime. Harmless for normal Vercel builds.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

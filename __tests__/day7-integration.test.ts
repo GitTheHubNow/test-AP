@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { JobExecutor, JobType } from '@/lib/jobs';
-import { collectPerformanceMetrics } from '@/lib/performance';
+import { getPerformanceMetrics } from '@/lib/performance';
 import { applyRetentionPolicies } from '@/lib/retention';
 import {
   EntityType,
@@ -219,9 +219,9 @@ describe('Day 7 - Advanced Features (Integration)', () => {
   });
 
   test('performance metrics should be collected', async () => {
-    const metrics = await collectPerformanceMetrics();
+    const metrics = await getPerformanceMetrics();
 
-    expect(metrics.database).toBeDefined();
+    expect(metrics.databaseResponseTime).toBeDefined();
     expect(metrics.auditTrail).toBeDefined();
     expect(metrics.entities).toBeDefined();
     expect(metrics.auditTrail.totalEvents).toBeGreaterThanOrEqual(0);
