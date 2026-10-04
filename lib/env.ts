@@ -97,6 +97,24 @@ const EnvSchema = z.object({
     message: 'AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, and CF_ACCOUNT_ID are required when NODE_ENV=production (lib/storage-server.ts uses S3/R2 in production, local disk otherwise)',
     path: ['AWS_S3_BUCKET'],
   },
+).refine(
+  (env) => {
+    if (env.NODE_ENV !== 'production') return true;
+    // z.string().url() alone can't catch this — "http://localhost:3000"
+    // is a perfectly valid URL, just the wrong one. Found live: this
+    // variable was set to localhost:3000 in the real Vercel Production
+    // environment (not a code bug — someone left/typed the dev default
+    // into the Production env var), and every QR code, collection-invite
+    // link, and handover-acceptance link generated in the meantime
+    // pointed there instead of the real domain. Stripe checkout/portal
+    // read this with a non-null assertion and no fallback, so those may
+    // have been throwing outright rather than silently misdirecting.
+    return !env.NEXT_PUBLIC_APP_URL.includes('localhost');
+  },
+  {
+    message: 'NEXT_PUBLIC_APP_URL is set to localhost in production — set it to your real deployed URL (e.g. https://your-domain.vercel.app) in Vercel\'s Production environment variables',
+    path: ['NEXT_PUBLIC_APP_URL'],
+  },
 );
 
 export type Env = z.infer<typeof EnvSchema>;

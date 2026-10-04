@@ -45,21 +45,11 @@ const nextConfig = {
           // dependent on any library.
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
           //
-          // NOT YET ADDED: Content-Security-Policy.
-          // Clerk (@clerk/nextjs) ships a built-in CSP generator via
-          // clerkMiddleware({ contentSecurityPolicy: {...} }) that
-          // correctly whitelists all of Clerk's + Stripe's required
-          // domains (frontend API, telemetry, challenges.cloudflare.com,
-          // js.stripe.com, etc.) — see
-          // https://clerk.com/docs/guides/secure/best-practices/csp-headers
-          // That feature requires @clerk/nextjs >= 6.14.0; this project
-          // is currently on ^5.7.5. Hand-writing a CSP against the
-          // wrong/incomplete domain list risks silently breaking sign-in
-          // or checkout in production — worse than shipping without one
-          // for now. TRACKED FOLLOW-UP: upgrade @clerk/nextjs deliberately
-          // (its own dedicated session — this is a major-version-range
-          // jump, not a drop-in bump), then add the CSP via
-          // clerkMiddleware's built-in support.
+          // Content-Security-Policy is set in proxy.ts via Clerk's
+          // built-in CSP generator (clerkMiddleware({ contentSecurityPolicy })),
+          // not here — Clerk's version injects it per-request alongside
+          // its own auth logic, and merging a second CSP header from
+          // next.config.js would conflict with it rather than combine.
         ],
       },
     ];
