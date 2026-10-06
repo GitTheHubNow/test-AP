@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
+import { validateAppearanceSettings } from '@/lib/memorial/validateAppearanceSettings';
 
 /**
  * GET  /api/memorial/[memorialId]/settings/appearance
@@ -85,47 +86,11 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const {
-      primaryColor,
-      backgroundColor,
-      fontFamily,
-      showTimeline,
-      showGallery,
-      showGuestBook,
-      showMemoryCount,
-      guestBookTitle,
-      guestBookPrompt,
-    } = body as {
-      primaryColor?:     string | null;
-      backgroundColor?:  string | null;
-      fontFamily?:       string | null;
-      showTimeline?:     boolean;
-      showGallery?:      boolean;
-      showGuestBook?:    boolean;
-      showMemoryCount?:  boolean;
-      guestBookTitle?:   string | null;
-      guestBookPrompt?:  string | null;
-    };
-
-    // Validate hex colors if provided
-    const hexRegex = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
-    if (primaryColor    && !hexRegex.test(primaryColor))    {
-      return NextResponse.json({ success: false, error: 'Invalid primaryColor hex value' }, { status: 400 });
+    const validated = validateAppearanceSettings(body);
+    if (!validated.ok) {
+      return NextResponse.json({ success: false, error: validated.error }, { status: 400 });
     }
-    if (backgroundColor && !hexRegex.test(backgroundColor)) {
-      return NextResponse.json({ success: false, error: 'Invalid backgroundColor hex value' }, { status: 400 });
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (primaryColor     !== undefined) updateData.primaryColor     = primaryColor;
-    if (backgroundColor  !== undefined) updateData.backgroundColor  = backgroundColor;
-    if (fontFamily       !== undefined) updateData.fontFamily        = fontFamily;
-    if (showTimeline     !== undefined) updateData.showTimeline      = showTimeline;
-    if (showGallery      !== undefined) updateData.showGallery       = showGallery;
-    if (showGuestBook    !== undefined) updateData.showGuestBook     = showGuestBook;
-    if (showMemoryCount  !== undefined) updateData.showMemoryCount   = showMemoryCount;
-    if (guestBookTitle   !== undefined) updateData.guestBookTitle    = guestBookTitle;
-    if (guestBookPrompt  !== undefined) updateData.guestBookPrompt   = guestBookPrompt;
+    const updateData = validated.data;
 
     const settings = await prisma.memorialSettings.upsert({
       where:  { memorialId: memorialId },

@@ -5,6 +5,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { handleAuthError } from '@/lib/errors';
+import { validateAppearanceSettings } from '@/lib/memorial/validateAppearanceSettings';
 
 export async function PATCH(
   req: NextRequest,
@@ -22,43 +23,21 @@ export async function PATCH(
     await assertMemorialAccess(memorialId, userId, 'edit');
 
     const body = await req.json();
-    const {
-      theme,
-      heroLayout,
-      fontFamily,
-      primaryColor,
-      backgroundColor,
-      showGallery,
-      showGuestBook,
-      guestBookTitle,
-      guestBookPrompt,
-    } = body;
+    const validated = validateAppearanceSettings(body);
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
+    }
+    const data = validated.data;
 
     const settings = await prisma.memorialSettings.upsert({
       where:  { memorialId: memorialId },
       create: {
         memorialId:      memorialId,
-        theme:           theme           ?? 'light',
-        heroLayout:      heroLayout      ?? 'full-bleed',
-        fontFamily:      fontFamily      ?? null,
-        primaryColor:    primaryColor    ?? null,
-        backgroundColor: backgroundColor ?? null,
-        showGallery:     showGallery     ?? true,
-        showGuestBook:   showGuestBook   ?? true,
-        guestBookTitle:  guestBookTitle  ?? null,
-        guestBookPrompt: guestBookPrompt ?? null,
+        theme:           data.theme           ?? 'light',
+        heroLayout:      data.heroLayout      ?? 'full-bleed',
+        ...data,
       },
-      update: {
-        ...(theme           !== undefined && { theme }),
-        ...(heroLayout      !== undefined && { heroLayout }),
-        ...(fontFamily      !== undefined && { fontFamily }),
-        ...(primaryColor    !== undefined && { primaryColor }),
-        ...(backgroundColor !== undefined && { backgroundColor }),
-        ...(showGallery     !== undefined && { showGallery }),
-        ...(showGuestBook   !== undefined && { showGuestBook }),
-        ...(guestBookTitle  !== undefined && { guestBookTitle }),
-        ...(guestBookPrompt !== undefined && { guestBookPrompt }),
-      },
+      update: data,
     });
 
     return NextResponse.json({ settings });

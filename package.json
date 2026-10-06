@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "audit:routes": "node scripts/audit-deployed-routes.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
