@@ -64,9 +64,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'lastName is required' }, { status: 400 });
   }
 
-  const orgId = await getOrgIdForUser(userId);
-
-  const result = await createMemorial({ ...body, ownerId: userId, organisationId: orgId });
+  // Everything below touches the DB. Without this try/catch, any throw
+  // (DB unreachable, Prisma engine missing, slug lookup failing…) became
+  // Next's HTML 500 page, which the client then failed to parse as JSON
+  // and showed as "Unexpected token '<'". Always answer in JSON, and log
+  // the real cause so it shows up in Vercel's function logs.
+  let result: Awaited<ReturnType<typeof createMemorial>>;
+  try {
+    const orgId = await getOrgIdForUser(userId);
+    result = await createMemorial({ ...body, ownerId: userId, organisationId: orgId });
+  } catch (err) {
+    console.error('[POST /api/memorial] unhandled error:', err);
+    return NextResponse.json(
+      { success: false, error: 'Could not create the memorial. Please try again.' },
+      { status: 500 },
+    );
+  }
 
   if (!result.ok) {
     if (result.kind === 'server_error') {

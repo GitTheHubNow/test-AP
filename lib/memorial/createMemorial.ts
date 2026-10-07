@@ -125,9 +125,9 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
   // Generated outside the transaction below — generateUniqueSlug does its
   // own uniqueness-check query, which is simplest to resolve before we
   // open the memorial-creation transaction rather than nesting it inside.
-  const slug = await generateUniqueSlug(firstName, lastName);
-
   try {
+    const slug = await generateUniqueSlug(firstName, lastName);
+
     const memorial = await prisma.$transaction(async (tx) => {
       const mem = await tx.memorial.create({
         data: {

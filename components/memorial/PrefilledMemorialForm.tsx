@@ -418,8 +418,15 @@ export function PrefilledMemorialForm({ prefill }: Props) {
         }),
       });
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to create memorial');
+      // The server can answer with an HTML error page (unhandled 500) —
+      // don't let res.json() blow up with "Unexpected token '<'".
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          json?.error || `Server error (${res.status}). Please try again, or contact support if it keeps happening.`,
+        );
+      }
+      if (!json) throw new Error('Unexpected response from server. Please try again.');
 
       const appUrl   = window.location.origin;
       const memorial = json.data?.memorial ?? json;
