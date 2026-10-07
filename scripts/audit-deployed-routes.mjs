@@ -84,7 +84,7 @@ const routes = routeFiles.map((file) => {
     .replace(/\[([^\]]+)\]/g, 'audit-probe-$1'); // [token] -> audit-probe-token
 
   const content = readFileSync(file, 'utf8');
-  const methods = [...content.matchAll(/export\s+async\s+function\s+(GET|POST|PATCH|PUT|DELETE)\b/g)]
+  const methods = [...content.matchAll(/export\s+(?:async\s+function|const)\s+(GET|POST|PATCH|PUT|DELETE)\b/g)]
     .map((m) => m[1]);
 
   // Prefer GET (cleanest signal, no body needed); fall back to whatever's

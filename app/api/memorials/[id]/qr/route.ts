@@ -3,7 +3,7 @@
 // GET  — Returns QR code SVG + current lifecycle config for a memorial
 // PUT  — Updates QR lifecycle config (state, service time, unlock time, pamphlet)
 //
-// Protected by: Clerk middleware (/api/memorials/.* is in middleware.ts)
+// Protected by: Clerk auth in proxy.ts, plus explicit auth() + assertMemorialAccess below
 // Feature flag: featureQrLifecycle must be true for the user's org
 //
 // publicToken is generated lazily on first GET — not at memorial creation.
@@ -87,7 +87,12 @@ export const GET = withErrorHandling(async (
     });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://memoriam.app';
+  // No fallback on purpose: a QR code printed with the wrong domain is
+  // permanent. Fail loudly instead.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    throw new Error('NEXT_PUBLIC_APP_URL is not set — cannot generate QR URL');
+  }
 
   // Every memorial should have a slug by this point (backfilled + set at
   // creation going forward — see lib/memorial/slug.ts). This fallback
@@ -155,7 +160,33 @@ export const PUT = withErrorHandling(async (
   await assertMemorialAccess(id, userId, 'edit');
   await assertFeatureEnabled(userId, 'qrLifecycle');
 
-  const body: QRConfigUpdate = await req.json();
+  let body: QRConfigUpdate;
+  try {
+    body = await req.json();
+  } catch {
+    return CommonErrors.badRequest('Invalid JSON body');
+  }
+  if (!body || typeof body !== 'object') {
+    return CommonErrors.badRequest('Invalid body');
+  }
+  for (const k of ['pamphletTitle', 'pamphletVenueNote', 'pamphletMessage'] as const) {
+    const v = body[k];
+    if (v !== undefined && v !== null && typeof v !== 'string') {
+      return CommonErrors.badRequest(`${k} must be a string`);
+    }
+  }
+  if (body.pamphletEnabled !== undefined && typeof body.pamphletEnabled !== 'boolean') {
+    return CommonErrors.badRequest('pamphletEnabled must be a boolean');
+  }
+  if (typeof body.pamphletTitle === 'string' && body.pamphletTitle.length > 200) {
+    return CommonErrors.badRequest('pamphletTitle too long (max 200)');
+  }
+  for (const k of ['pamphletVenueNote', 'pamphletMessage'] as const) {
+    const v = body[k];
+    if (typeof v === 'string' && v.length > 2000) {
+      return CommonErrors.badRequest(`${k} too long (max 2000)`);
+    }
+  }
 
   // Fetch current state for transition validation
   const current = await prisma.memorial.findUnique({
