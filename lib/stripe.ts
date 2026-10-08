@@ -35,9 +35,35 @@ import Stripe from 'stripe';
 
 // ── Client singleton ─────────────────────────────────────────────────────────
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-  typescript: true,
+// LAZY on purpose. `new Stripe(undefined)` throws immediately, and doing
+// that at import time meant a missing STRIPE_SECRET_KEY crashed every route
+// that merely *imports* this file (e.g. POST /api/memorial via
+// createMemorial) with an unhandled HTML 500 — before any try/catch in the
+// route could run. The client is now built on first use, so a missing key
+// fails only where Stripe is actually called, with a clear message.
+let _stripe: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (_stripe) return _stripe;
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error('STRIPE_SECRET_KEY is not set in this environment');
+  }
+  _stripe = new Stripe(key, {
+    apiVersion: '2026-02-25.clover',
+    typescript: true,
+  });
+  return _stripe;
+}
+
+// Same `stripe.customers.create(...)` call style everywhere — no call-site
+// changes needed.
+export const stripe: Stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    const client = getStripe();
+    const value = Reflect.get(client, prop, client);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
 });
 
 // ── Price IDs ─────────────────────────────────────────────────────────────────
