@@ -28,7 +28,7 @@ import { assertStorageQuotaAvailable } from '@/lib/storage-quota';
 // of storage cost.
 //
 // This is a flat per-file cap, not derived from PLAN_LIMITS.storageMbPerMemorial
-// (lib/stripe.ts) — that field is a cumulative per-memorial storage
+// (lib/storage-quota.ts) — that field is a cumulative per-memorial storage
 // budget across all uploads, not a single-file size limit, and tying
 // this cap to it directly would either let a STARTER org's first video
 // consume its entire quota in one file, or be needlessly loose for

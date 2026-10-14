@@ -1,6 +1,6 @@
 // lib/storage-quota.ts
 //
-// Enforces STORAGE_MB_PER_MEMORIAL (lib/stripe.ts) — a flat, per-memorial
+// Enforces STORAGE_MB_PER_MEMORIAL (defined below) — a flat, per-memorial
 // cumulative storage cap covering every CollectionItem's file
 // (photos/documents/videos uploaded via any of the collection routes)
 // plus the tribute video, if rendered. Previously declared but never
@@ -15,7 +15,9 @@
 // different ways with four different bugs is worse than no cap at all.
 
 import { prisma } from '@/lib/prisma';
-import { STORAGE_MB_PER_MEMORIAL } from '@/lib/stripe';
+// Flat per-memorial storage cap, same for every site. (Previously defined in
+// lib/stripe.ts; it was never billing-related, so it lives here now.)
+export const STORAGE_MB_PER_MEMORIAL = 5120; // 5GB
 
 export const STORAGE_BYTES_PER_MEMORIAL = STORAGE_MB_PER_MEMORIAL * 1024 * 1024;
 

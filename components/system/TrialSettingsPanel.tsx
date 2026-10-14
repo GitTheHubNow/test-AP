@@ -13,13 +13,14 @@ interface TrialSettings {
 /**
  * TrialSettingsPanel
  *
- * Platform-admin-only control for the free-trial length applied to new
- * Stripe Checkout subscriptions, plus an on/off switch for a promo label
+ * Platform-admin-only control for the free-trial length applied to newly
+ * created organisations, plus an on/off switch for a promo label
  * shown on the pricing/signup UI (e.g. "Launch special — 2 months free").
  *
  * See app/api/system/trial-settings/route.ts for the API this talks to,
- * and app/api/billing/checkout/route.ts for where trialDays is actually
- * consumed at checkout time.
+ * and lib/billing/trial.ts for where trialDays is consumed (it is stamped
+ * onto Organisation.trialEndsAt at org creation; changing it does not
+ * alter existing orgs' trials).
  */
 export function TrialSettingsPanel() {
   const [settings, setSettings] = useState<TrialSettings | null>(null);

@@ -4,9 +4,8 @@
  * components/dashboard/OnboardedBanner.tsx
  *
  * Part D — shown once on first dashboard arrival after completing
- * onboarding (org named + payment method added), driven by the
- * ?onboarded=1 query param set in the checkout session's success_url
- * (see app/api/billing/checkout/route.ts).
+ * onboarding (org named), driven by the ?onboarded=1 query param added
+ * by app/onboarding/page.tsx when it redirects to the dashboard.
  *
  * "One-time" here means: shown for this single page load only. It does
  * not persist dismissal server-side — reloading /dashboard without the

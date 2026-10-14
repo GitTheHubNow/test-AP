@@ -14,7 +14,7 @@
       "schedule": "0 21 * * *"
     },
     {
-      "path": "/api/cron/reset-usage",
+      "path": "/api/cron/billing",
       "schedule": "0 0 1 * *"
     }
   ]

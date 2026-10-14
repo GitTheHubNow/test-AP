@@ -466,28 +466,13 @@ model PageView {
   @@map("page_views")
 }
 
-model StripeCustomer {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  stripeCustomerId String   @unique
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([userId])
-  @@index([stripeCustomerId])
-  @@map("stripe_customers")
-}
-
 model Entitlement {
   id                  String             @id @default(cuid())
   memorialId          String             @unique
   tier                EntitlementTier    @default(FREE)
   subscriptionStatus  SubscriptionStatus @default(NONE)
-  stripeSubId         String?            @unique
-  subscriptionPriceId String?
   currentPeriodEnd    DateTime?
   storagePaid         Boolean            @default(false)
-  storageCheckoutId   String?
   storagePaidAt       DateTime?
   storageExpiresAt    DateTime?
   active              Boolean            @default(true)
@@ -497,7 +482,6 @@ model Entitlement {
   memorial Memorial @relation(fields: [memorialId], references: [id], onDelete: Restrict)
 
   @@index([memorialId])
-  @@index([stripeSubId])
   @@index([active])
   @@index([storagePaid])
   @@index([storageExpiresAt])
@@ -686,7 +670,7 @@ model TributeVideo {
   webBlobKey      String?
   // Size of the rendered video file in bytes. Added so tribute videos
   // count toward the per-memorial storage quota (STORAGE_MB_PER_MEMORIAL
-  // in lib/stripe.ts) — before this field existed, a memorial's video
+  // in lib/storage-quota.ts) — before this field existed, a memorial's video
   // was invisible to any storage-usage calculation based on Media.sizeBytes,
   // since TributeVideo isn't a Media row. Nullable because existing rows
   // predate this field and their actual size isn't known retroactively;
@@ -1041,7 +1025,7 @@ enum PetIntakeStatus {
 }
 
 // ============================================================================
-// SAAS LAUNCH — Organisation, OrgMember, StripeEvent
+// SAAS LAUNCH — Organisation, OrgMember
 // ============================================================================
 
 enum OrgPlan {
@@ -1063,13 +1047,21 @@ model Organisation {
   name               String
   slug               String             @unique
   plan               OrgPlan            @default(STARTER)
-  stripeCustomerId   String?            @unique
-  stripeSubId        String?            @unique
-  subscriptionStatus SubscriptionStatus @default(NONE)
-  stripePriceId      String?
-  currentPeriodEnd   DateTime?
-  cancelAtPeriodEnd  Boolean            @default(false)
+  // Account standing for manual (invoice-based) billing — no payment
+  // provider is involved. ACTIVE / PAST_DUE can create memorials; CANCELED
+  // means suspended by the platform admin (see lib/entitlement.ts).
+  // Set only by the admin route PATCH /api/system/billing/orgs/[orgId].
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  // End of the free trial. Usage recorded before this instant is waived
+  // (price 0) and no base fee is charged — see lib/billing/usage.ts.
   trialEndsAt        DateTime?
+  // Where billing statements are emailed. Null = every OWNER member's
+  // account email (resolved via Clerk) — see lib/billing/statements.ts.
+  billingEmail           String?
+  // Per-site negotiated rates, in cents. Null = platform default
+  // (lib/billing/pricing.ts). Applied at the moment usage is recorded.
+  customBaseFeeCents     Int?
+  customMemorialFeeCents Int?
   // Signup-time consent — captured once, at org creation, in
   // app/api/onboarding/create-org/route.ts. Tracks WHO on the org
   // accepted (not just "the org"), WHEN, and WHICH version of the
@@ -1080,15 +1072,11 @@ model Organisation {
   termsAcceptedAt        DateTime?
   termsAcceptedVersion   String?
   termsAcceptedByUserId  String?
-  memorialsThisMonth Int                @default(0)
-  videosThisMonth    Int                @default(0)
   logoKey            String? // V1: storage path key (kept for backward compat)
   brandColor         String? // V1: single brand colour (kept for backward compat)
   customDomain       String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  meteredItemId      String?
-
   // Phase 17: White-label branding ────────────────────────────────────────────
   // brandName: public-facing display name e.g. "Smith Funeral Services".
   // Separate from `name` which is the internal Clerk account name.
@@ -1147,11 +1135,11 @@ model Organisation {
   funeralCases FuneralCase[]
   petCases     PetCase[]
   petIntakeRequests PetIntakeRequest[]
+  usageEvents       UsageEvent[]
+  billingStatements BillingStatement[]
 
   @@index([clerkOrgId])
   @@index([slug])
-  @@index([stripeCustomerId])
-  @@index([stripeSubId])
   @@map("organisations")
 }
 
@@ -1171,17 +1159,92 @@ model OrgMember {
   @@map("org_members")
 }
 
-model StripeEvent {
-  id        String   @id
-  type      String
-  processed Boolean  @default(false)
-  payload   Json
-  error     String?
-  createdAt DateTime @default(now())
+// ============================================================================
+// MANUAL BILLING — usage ledger + monthly statements (replaces Stripe)
+// ============================================================================
+//
+// Every billable action writes ONE UsageEvent, inside the same database
+// transaction as the action itself (see createMemorial). Statements are
+// generated from the ledger, never from counters, so every dollar on an
+// invoice traces back to a specific memorial and a specific moment.
 
-  @@index([type])
-  @@index([processed])
-  @@map("stripe_events")
+enum UsageEventType {
+  MEMORIAL_CREATED
+  TRIBUTE_VIDEO_RENDERED
+}
+
+enum StatementStatus {
+  DRAFT // generated, not yet emailed — safe to regenerate
+  SENT // emailed to the site, awaiting payment
+  PAID
+  VOID // cancelled; its usage events are released for re-billing
+}
+
+model UsageEvent {
+  id             String         @id @default(cuid())
+  organisationId String
+  type           UsageEventType
+  // Plain string, deliberately NOT a relation to Memorial: the billing
+  // record must survive whatever later happens to the memorial row.
+  // memorialTitle is a snapshot for the same reason.
+  memorialId     String
+  memorialTitle  String
+  // Price actually charged for this event, in cents, frozen at the moment
+  // it happened — later rate changes never rewrite history. 0 = tracked
+  // but not charged (trial, or event types with no fee).
+  unitPriceCents Int
+  note           String?
+  // Set when an admin voids a single event (e.g. a memorial created by
+  // mistake). Voided events are excluded from statements.
+  voidedAt       DateTime?
+  voidReason     String?
+  // Set when the event has been included on a statement.
+  statementId    String?
+  occurredAt     DateTime       @default(now())
+
+  organisation Organisation      @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  statement    BillingStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
+
+  // One memorial can only ever be billed once per event type, no matter
+  // how many times the recording code runs (retries, double-clicks).
+  @@unique([type, memorialId])
+  @@index([organisationId, occurredAt])
+  @@index([statementId])
+  @@map("usage_events")
+}
+
+model BillingStatement {
+  id               String          @id @default(cuid())
+  organisationId   String
+  // "YYYY-MM" in the billing timezone — see lib/billing/period.ts
+  periodKey        String
+  // Human-friendly and deterministic: AP-202609-<org suffix>
+  number           String          @unique
+  periodStart      DateTime
+  periodEnd        DateTime
+  status           StatementStatus @default(DRAFT)
+  currency         String          @default("AUD")
+  baseFeeCents     Int
+  usageCents       Int
+  totalCents       Int
+  // Snapshot of the invoice lines (see StatementLine in
+  // lib/billing/statements.ts) so a sent statement never changes.
+  lineItems        Json
+  sentAt           DateTime?
+  sentTo           String[]
+  dueAt            DateTime?
+  paidAt           DateTime?
+  paymentReference String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  usageEvents  UsageEvent[]
+
+  @@unique([organisationId, periodKey])
+  @@index([status])
+  @@index([periodKey])
+  @@map("billing_statements")
 }
 
 // ── ADDED: rate limiting for public write endpoints ──────────────────────

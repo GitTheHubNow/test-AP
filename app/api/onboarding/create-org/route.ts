@@ -39,6 +39,7 @@ import { prisma }                     from '@/lib/prisma';
 import { logError }                   from '@/lib/errors';
 import { checkRateLimit }             from '@/lib/rateLimit';
 import { CURRENT_TERMS_VERSION }      from '@/lib/legal';
+import { computeTrialEndsAt }         from '@/lib/billing/trial';
 
 function slugify(name: string): string {
   return name
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
         name:       rawName,
         slug,
         plan:       'STARTER',
+        trialEndsAt: await computeTrialEndsAt(),
         featureCaseLite:     caseTypes.includes('HUMAN'),
         featurePetAftercare: caseTypes.includes('PET'),
         termsAcceptedAt:       new Date(),

@@ -21,7 +21,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { OnboardingSteps } from '@/components/onboarding/OnboardingSteps';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -77,7 +76,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      router.push('/onboarding/payment');
+      router.push('/dashboard?onboarded=1');
     } catch {
       setError('Something went wrong. Please try again.');
       setIsSubmitting(false);
@@ -91,15 +90,12 @@ export default function OnboardingPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 460 }}>
 
-        {/* Step indicator */}
-        <OnboardingSteps current={1} />
-
         <div style={{
           background: '#3f4c61', border: '1px solid #5c6a80', borderRadius: 14,
           padding: '2.5rem 2.25rem',
         }}>
           <p style={{ margin: '0 0 0.4rem', fontSize: '0.6rem', letterSpacing: '0.28em', textTransform: 'uppercase', color: '#cdba93' }}>
-            Step 1 of 2
+            Welcome
           </p>
           <h1 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 300, color: '#f4f1ea' }}>
             Name your organisation

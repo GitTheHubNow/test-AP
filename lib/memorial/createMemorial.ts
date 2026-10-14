@@ -12,12 +12,12 @@
 import { prisma } from '@/lib/prisma';
 import { randomUUID, createHash } from 'crypto';
 import { addDays } from 'date-fns';
-// CHANGED — checkEntitlement('memorialsPerMonth') no longer exists.
-// Under the base + per-memorial-metered pricing model there's no
-// quantity cap to check, only whether the subscription is active at
-// all. See lib/entitlement.ts header comment for the full context.
-import { checkSubscriptionActive, incrementUsage } from '@/lib/entitlement';
-import { stripe, getMemorialPriceId } from '@/lib/stripe';
+// No quantity cap — only whether the account has been suspended. See the
+// lib/entitlement.ts header comment.
+import { checkAccountActive } from '@/lib/entitlement';
+// Every memorial writes one usage-ledger row in the same transaction.
+// See lib/billing/usage.ts.
+import { recordUsage } from '@/lib/billing/usage';
 import { generateUniqueSlug } from '@/lib/memorial/slug';
 import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
 
@@ -46,54 +46,11 @@ export interface CreateMemorialInput {
   sendAfterDays?:  number;
 }
 
-// ── Stripe metered usage reporting ─────────────────────────────────────────────
-//
-// Reports 1 unit of usage against the $199/memorial metered price via
-// Stripe's Meter Events API. NOTE: this deliberately does NOT use
-// Organisation.meteredItemId (a schema field from an earlier, abandoned
-// attempt at this feature — see prisma/migrations/..._add_metered_item_id).
-// That field targeted the OLD usage-records API, which Stripe removed as
-// of API version 2025-03-31.basil — this app is on 2026-02-25.clover,
-// well past that cutoff. The current API reports usage against a
-// stripe_customer_id via a Meter Event, not against a subscription item
-// ID, so meteredItemId is not needed here. It's left in the schema
-// un-migrated for now (out of scope for this change) but is not used by
-// this function or anywhere else in the codebase.
-//
-// REQUIRES a Billing Meter to exist in the Stripe Dashboard (Product
-// catalog → Meters) with event_name 'memorial_created', and the
-// $199/memorial Price (STRIPE_MEMORIAL_PRICE_ID) must be linked to that
-// meter when it's created — a metered Price cannot report usage without
-// one. This is a one-time Stripe Dashboard setup step, not something
-// this code creates programmatically.
-async function reportMemorialUsageToStripe(orgId: string, memorialId: string): Promise<void> {
-  const org = await prisma.organisation.findUnique({
-    where:  { id: orgId },
-    select: { stripeCustomerId: true },
-  });
-
-  if (!org?.stripeCustomerId) {
-    console.warn(`[reportMemorialUsageToStripe] Org ${orgId} has no stripeCustomerId, skipping usage report`);
-    return;
-  }
-
-  await stripe.billing.meterEvents.create({
-    event_name: 'memorial_created',
-    payload: {
-      stripe_customer_id: org.stripeCustomerId,
-      value: '1',
-    },
-    // Idempotency: keyed on the memorial's own ID, not a fresh
-    // timestamp/UUID per call — this is what actually makes a retry of
-    // reporting for the SAME memorial a no-op within Stripe's rolling
-    // 24h de-dupe window, rather than defeating idempotency by making
-    // every call look like a distinct event.
-    identifier: `memorial-created-${memorialId}`,
-  });
-}
-
 export type CreateMemorialResult =
   | { ok: true; memorial: { id: string; title: string; slug: string; qrTokenHash: string; uploadLinkToken: string; workflowStage: string } }
+  // 'plan_limit' is now only returned for a SUSPENDED account (kept as the
+  // kind name so existing callers — app/api/memorial/route.ts and the CSV
+  // import — keep working unchanged).
   | { ok: false; kind: 'validation' | 'plan_limit' | 'server_error'; error: string };
 
 export async function createMemorial(input: CreateMemorialInput): Promise<CreateMemorialResult> {
@@ -103,14 +60,12 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
   if (!firstName) return { ok: false, kind: 'validation', error: 'firstName is required' };
   if (!lastName)  return { ok: false, kind: 'validation', error: 'lastName is required' };
 
-  // CHANGED — was checkEntitlement(orgId, 'memorialsPerMonth'), which
-  // blocked creation once a plan tier's monthly cap was hit. No cap
-  // exists anymore (every memorial is billed via Stripe metered usage,
-  // see reportMemorialUsageToStripe below) — this only checks the
-  // subscription is actually active, not cancelled/unpaid.
-  const entitlement = await checkSubscriptionActive(input.organisationId);
+  // No quantity cap — every memorial is recorded in the usage ledger and
+  // billed on the site's monthly statement. This only blocks a SUSPENDED
+  // account.
+  const entitlement = await checkAccountActive(input.organisationId);
   if (!entitlement.allowed) {
-    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Subscription inactive' };
+    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Account suspended' };
   }
 
   const title = `${firstName} ${lastName}`;
@@ -187,6 +142,18 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
       await tx.memorialSettings.create({ data: { memorialId: mem.id } });
       await tx.entitlement.create({ data: { memorialId: mem.id, tier: 'FREE' } });
 
+      // BILLING: one ledger row per memorial, in the SAME transaction as the
+      // memorial itself — so a memorial can never exist unbilled, and a
+      // rolled-back creation never leaves a billed ghost. Idempotent on
+      // (type, memorialId); the price is frozen here from the site's rates
+      // and trial state. See lib/billing/usage.ts.
+      await recordUsage(tx, {
+        organisationId: input.organisationId,
+        type:           'MEMORIAL_CREATED',
+        memorialId:     mem.id,
+        memorialTitle:  title,
+      });
+
       if (input.familyContactEmail?.trim()) {
         const funeralDate = input.funeralDate ? new Date(input.funeralDate) : null;
         const scheduledAt = funeralDate ? addDays(funeralDate, 7) : null;
@@ -208,23 +175,6 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
       }
 
       return mem;
-    });
-
-    await incrementUsage(input.organisationId, 'memorialsThisMonth');
-
-    // Report 1 unit of metered usage to Stripe for the $199/memorial
-    // charge. Deliberately outside the transaction and deliberately
-    // never allowed to fail the whole creation — a Stripe API hiccup
-    // shouldn't mean a family can't get a memorial created. If this
-    // fails, the local memorialsThisMonth counter (just incremented
-    // above) is still correct, so it's recoverable via a manual Stripe
-    // usage-record backfill if it ever actually happens; logged either
-    // way so that backfill has something to go on.
-    await reportMemorialUsageToStripe(input.organisationId, memorial.id).catch((err) => {
-      console.error(
-        `[createMemorial] Failed to report Stripe usage for org ${input.organisationId}, memorial ${memorial.id}:`,
-        err,
-      );
     });
 
     return {

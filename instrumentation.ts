@@ -25,8 +25,8 @@ export async function register() {
       // Fail fast on boot rather than letting the server start with a
       // broken config and failing later on whatever route happens to
       // need the missing var first — which is exactly what happened
-      // earlier this session with a missing Stripe key surfacing as a
-      // checkout 500 instead of an immediate, obvious boot failure.
+      // earlier with a missing key surfacing as a request-time 500
+      // instead of an immediate, obvious boot failure.
       if (process.env.NODE_ENV !== 'test') {
         process.exit(1);
       }

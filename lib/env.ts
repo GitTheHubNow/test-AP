@@ -5,8 +5,7 @@ import { z } from 'zod';
  *
  * Was previously "Minimal implementation for Option C" — only validated
  * 5 of the ~20 env vars the app actually depends on (DATABASE_URL, Clerk
- * keys, APP_URL, NODE_ENV). Missing: Stripe (secret key, webhook secret,
- * 3 price IDs), Resend, CRON_SECRET, AWS/S3, IP_HASH_SALT,
+ * keys, APP_URL, NODE_ENV). Missing: Resend, CRON_SECRET, AWS/S3, IP_HASH_SALT,
  * PLATFORM_ADMIN_USER_IDS. Expanded below to cover all of them.
  *
  * ALSO — this file was never actually imported anywhere in the app, so
@@ -29,21 +28,14 @@ const EnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  // Stripe — billing/checkout will fail at request-time without these;
-  // catching it at boot instead of on a live user's first checkout
-  // attempt is the whole point of this file existing.
-  //
-  // $99/mo base fee + $199/memorial metered usage — see lib/stripe.ts
-  // for the full pricing model writeup. Was STRIPE_STARTER_PRICE_ID /
-  // STRIPE_PROFESSIONAL_PRICE_ID / STRIPE_ENTERPRISE_PRICE_ID (3-tier
-  // model) — stripe.ts was updated when the pricing model changed, but
-  // this schema was missed, so the app failed to boot at all (env
-  // validation ran before any checkout code, demanding vars that no
-  // longer exist anywhere else in the codebase).
-  STRIPE_SECRET_KEY: z.string().min(1).startsWith('sk_'),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1).startsWith('whsec_'),
-  STRIPE_BASE_PRICE_ID: z.string().min(1).startsWith('price_'),
-  STRIPE_MEMORIAL_PRICE_ID: z.string().min(1).startsWith('price_'),
+  // Manual (invoice-based) billing — see lib/billing/. All optional so the
+  // app boots without them; statements simply cannot be SENT until
+  // BILLING_PAYMENT_INSTRUCTIONS is set (a bill with no way to pay it is
+  // refused by lib/billing/statements.ts, and a warning is logged at boot).
+  BILLING_PAYMENT_INSTRUCTIONS: z.string().optional(), // bank details etc; "\\n" = line break
+  BILLING_DUE_DAYS: z.coerce.number().int().positive().max(365).optional(), // default 14
+  BILLING_TIMEZONE: z.string().optional(),             // default Australia/Sydney
+  BILLING_AUTO_SEND: z.enum(['true', 'false']).optional(), // email statements automatically from the monthly cron
 
   // Email
   RESEND_API_KEY: z.string().min(1),
@@ -106,9 +98,7 @@ const EnvSchema = z.object({
     // environment (not a code bug — someone left/typed the dev default
     // into the Production env var), and every QR code, collection-invite
     // link, and handover-acceptance link generated in the meantime
-    // pointed there instead of the real domain. Stripe checkout/portal
-    // read this with a non-null assertion and no fallback, so those may
-    // have been throwing outright rather than silently misdirecting.
+    // pointed there instead of the real domain.
     return !env.NEXT_PUBLIC_APP_URL.includes('localhost');
   },
   {
@@ -143,6 +133,13 @@ export function getEnv(): Env {
       'lib/rateLimit.ts. That salt is visible in source and defeats the ' +
       'purpose of hashing IPs (anyone with the codebase could pre-compute ' +
       'a reverse-lookup table). Not fatal, but set this before launch.',
+    );
+  }
+
+  if (!cachedEnv.BILLING_PAYMENT_INSTRUCTIONS) {
+    console.warn(
+      '⚠️  BILLING_PAYMENT_INSTRUCTIONS is not set — billing statements cannot ' +
+      'be emailed until it is (your bank details / how customers should pay).',
     );
   }
 

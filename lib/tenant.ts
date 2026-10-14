@@ -10,6 +10,7 @@
 
 import { prisma }  from '@/lib/prisma';
 import type { Organisation, OrgRole } from '@prisma/client';
+import { computeTrialEndsAt } from '@/lib/billing/trial';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export async function getOrgForUser(userId: string): Promise<OrgWithRole> {
       name:       'My Funeral Home',
       slug:       `user-${userId.slice(-8).toLowerCase()}`,
       plan:       'STARTER',
+      trialEndsAt: await computeTrialEndsAt(),
       members: {
         create: { userId, role: 'OWNER' },
       },

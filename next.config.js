@@ -20,7 +20,7 @@ const nextConfig = {
       // ── FFmpeg WASM headers ──────────────────────────────────────────────
       // SharedArrayBuffer requires these — but ONLY on the video page.
       // Applying to all routes breaks fetch() in API routes and causes
-      // issues with third-party scripts (Stripe, Clerk).
+      // issues with third-party scripts (Clerk).
       {
         source: '/dashboard/memorial/:memorialId/video',
         headers: [

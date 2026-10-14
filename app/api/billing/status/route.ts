@@ -1,71 +1,49 @@
 /**
  * GET /api/billing/status
  *
- * Returns the current org's subscription status and usage/billing
- * estimate.
- *
- * CHANGED — was plan-tier + limits + feature-flags. Under the base +
- * per-memorial-metered model there's one plan for everyone, no limits
- * to hit, and every feature is available to any org with an active
- * subscription — so `plan`, `limits`, and `features` are gone from this
- * response. Replaced with a running total of what this month's usage
- * will actually cost.
- *
- * Response shape:
- * {
- *   subscriptionStatus: 'NONE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'INCOMPLETE'
- *   currentPeriodEnd: string | null
- *   cancelAtPeriodEnd: boolean
- *   trialEndsAt: string | null
- *   billing: {
- *     baseFeeAud: number
- *     perMemorialAud: number
- *   }
- *   usage: {
- *     memorialsThisMonth: number
- *     videosThisMonth: number
- *     estimatedMemorialChargeAud: number
- *   }
- * }
+ * A site's billing summary: account standing, rates, trial, how to pay, and
+ * the running total for the current billing month. Any org member may read
+ * this (it drives the dashboard banner); per-memorial detail is in
+ * /api/billing/usage and past bills in /api/billing/statements.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { auth }                       from '@clerk/nextjs/server';
-import { getOrgForUser }              from '@/lib/tenant';
-import { getUsage }                   from '@/lib/entitlement';
-import { BILLING_DISPLAY }            from '@/lib/stripe';
+import { NextResponse } from 'next/server';
+import { withBillingOrg } from '@/lib/billing/routeHelpers';
+import { getOrgRates, baseFeeApplies, isInTrial, CURRENCY } from '@/lib/billing/pricing';
+import { getPeriodUsage } from '@/lib/billing/usage';
+import { periodBounds, periodKeyFor } from '@/lib/billing/period';
+import { getPaymentInstructions } from '@/lib/billing/statements';
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
-    }
-
-    const org   = await getOrgForUser(userId);
-    const usage = await getUsage(org.id);
+export async function GET() {
+  return withBillingOrg('GET /api/billing/status', async (org) => {
+    const now      = new Date();
+    const period   = periodKeyFor(now);
+    const rates    = getOrgRates(org);
+    const usage    = await getPeriodUsage(org.id, period);
+    const { end }  = periodBounds(period);
+    const baseFee  = baseFeeApplies(org.trialEndsAt, end, org.subscriptionStatus === 'CANCELED') ? rates.baseFeeCents : 0;
 
     return NextResponse.json({
       success: true,
       data: {
-        subscriptionStatus: org.subscriptionStatus,
-        currentPeriodEnd:   org.currentPeriodEnd?.toISOString() ?? null,
-        cancelAtPeriodEnd:  org.cancelAtPeriodEnd,
-        trialEndsAt:        org.trialEndsAt?.toISOString() ?? null,
-        billing: {
-          baseFeeAud:     BILLING_DISPLAY.baseFeeAud,
-          perMemorialAud: BILLING_DISPLAY.perMemorialAud,
+        accountStatus: org.subscriptionStatus, // ACTIVE | PAST_DUE | CANCELED (= suspended)
+        currency:      CURRENCY,
+        trialEndsAt:   org.trialEndsAt?.toISOString() ?? null,
+        inTrial:       isInTrial(org.trialEndsAt, now),
+        rates: {
+          baseFeeCents:     rates.baseFeeCents,
+          memorialFeeCents: rates.memorialFeeCents,
         },
-        usage: {
-          memorialsThisMonth:         usage.memorialsThisMonth,
-          videosThisMonth:            usage.videosThisMonth,
-          estimatedMemorialChargeAud: usage.estimatedMemorialChargeAud,
+        paymentInstructions: getPaymentInstructions() || null,
+        currentPeriod: {
+          periodKey:           period,
+          memorialCount:       usage.totals.memorialCount,
+          videoCount:          usage.totals.videoCount,
+          usageCents:          usage.totals.usageCents,
+          baseFeeCents:        baseFee,
+          estimatedTotalCents: baseFee + usage.totals.usageCents,
         },
       },
     });
-
-  } catch (error) {
-    console.error('[GET /api/billing/status]', error);
-    return NextResponse.json({ success: false, error: 'Failed to fetch billing status' }, { status: 500 });
-  }
+  }, { anyMember: true });
 }

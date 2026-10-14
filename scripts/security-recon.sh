@@ -152,7 +152,7 @@ done
 # ── 5. Cron routes — must reject requests with no/wrong bearer token ─────
 hr
 note "Probing cron routes (expect 401 — these should NEVER be callable without CRON_SECRET)"
-for route in "/api/cron/run" "/api/cron/maintenance" "/api/cron/reset-usage" "/api/cron/unlock-memorials"; do
+for route in "/api/cron/run" "/api/cron/maintenance" "/api/cron/billing" "/api/cron/unlock-memorials"; do
   code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST --max-time 10 "$TARGET$route")"
   if [[ "$code" == "401" ]]; then
     ok "$route -> 401 (correctly rejected with no token)"
