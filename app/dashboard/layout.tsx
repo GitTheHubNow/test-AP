@@ -40,6 +40,8 @@ import { auth }              from '@clerk/nextjs/server';
 import { redirect }          from 'next/navigation';
 import Link                  from 'next/link';
 import { getOrgContextForUser } from '@/lib/auth/getOrgForUser';
+import { isPlatformAdmin } from '@/lib/auth/platformAdmin';
+import { BillingReviewBanner } from '@/components/dashboard/BillingReviewBanner';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth();
@@ -140,6 +142,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Billing
           </Link>
 
+          {isPlatformAdmin(userId) && (
+            <Link href="/dashboard/system/billing" className="sidebar-nav-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Billing (all sites)
+            </Link>
+          )}
+
           {/* ── Support ── */}
           <span className="sidebar-section-label" style={{ marginTop: '0.75rem' }}>Support</span>
 
@@ -167,6 +179,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       {/* ── Main content ─────────────────────────────────────────────── */}
       <div className="dash-content">
+        {/* Platform owner only: nudge when bills are ready to review/send */}
+        {isPlatformAdmin(userId) && <BillingReviewBanner />}
         {children}
       </div>
 

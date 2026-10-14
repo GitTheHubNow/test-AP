@@ -275,6 +275,23 @@ export async function sendStatement(statementId: string, opts: { resend?: boolea
   return { ok: true, statement: updated, sentTo: delivered };
 }
 
+export interface SendAllRow { statementId: string; number: string; ok: boolean; error?: string }
+
+/** Email every DRAFT statement for a month. One failure never stops the rest; failed ones stay DRAFT to retry. */
+export async function sendAllDrafts(periodKey: string): Promise<SendAllRow[]> {
+  const drafts = await prisma.billingStatement.findMany({
+    where:   { periodKey, status: 'DRAFT' },
+    select:  { id: true, number: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const rows: SendAllRow[] = [];
+  for (const d of drafts) {
+    const r = await sendStatement(d.id);
+    rows.push(r.ok ? { statementId: d.id, number: d.number, ok: true } : { statementId: d.id, number: d.number, ok: false, error: r.error });
+  }
+  return rows;
+}
+
 // ── Mark paid / void ─────────────────────────────────────────────────────────
 
 export type TransitionResult =

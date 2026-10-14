@@ -86,6 +86,26 @@ export default function SystemBillingPage() {
     setEditing(null);
   }
 
+  const drafts = (sites ?? []).filter((s) => s.statement?.status === 'DRAFT');
+  const draftTotal = drafts.reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
+
+  async function sendAll() {
+    if (!window.confirm(`Email ${drafts.length} bill${drafts.length === 1 ? '' : 's'} totalling ${money(draftTotal)} to the sites now?`)) return;
+    setBusy('sendall'); setMsg(null);
+    try {
+      const r = await fetch('/api/system/billing/statements/send-all', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period }),
+      }).then((x) => x.json());
+      if (!r.success) setMsg({ ok: false, text: r.error ?? 'Failed' });
+      else if (r.data.failed > 0) {
+        const names = r.data.failures.map((f: { number: string; error?: string }) => `${f.number}: ${f.error}`).join(' | ');
+        setMsg({ ok: false, text: `Sent ${r.data.sent}, but ${r.data.failed} failed and stay as drafts — ${names}` });
+      } else setMsg({ ok: true, text: `Sent ${r.data.sent} bill${r.data.sent === 1 ? '' : 's'}` });
+      load();
+    } catch { setMsg({ ok: false, text: 'Request failed' }); }
+    finally { setBusy(null); }
+  }
+
   const total = (sites ?? []).reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
 
   return (
@@ -96,6 +116,11 @@ export default function SystemBillingPage() {
         <button style={st.primary} disabled={busy === 'all'} onClick={() => generate()}>
           {busy === 'all' ? 'Generating…' : 'Generate drafts for all sites'}
         </button>
+        {drafts.length > 0 && (
+          <button style={{ ...st.primary, background: '#15803d' }} disabled={busy === 'sendall'} onClick={sendAll}>
+            {busy === 'sendall' ? 'Sending…' : `Send all ${drafts.length} drafts (${money(draftTotal)})`}
+          </button>
+        )}
         <span style={st.muted}>Statements this month: {money(total)}</span>
       </div>
       {msg && <div style={{ ...st.msg, background: msg.ok ? '#dcfce7' : '#fee2e2', color: msg.ok ? '#166534' : '#991b1b' }}>{msg.text}</div>}

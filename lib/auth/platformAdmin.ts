@@ -17,6 +17,10 @@ const PLATFORM_ADMIN_IDS = (process.env.PLATFORM_ADMIN_USER_IDS ?? '')
   .map((id) => id.trim())
   .filter(Boolean);
 
+export function getPlatformAdminIds(): string[] {
+  return [...PLATFORM_ADMIN_IDS];
+}
+
 export function isPlatformAdmin(userId: string | null | undefined): boolean {
   if (!userId) return false;
   return PLATFORM_ADMIN_IDS.includes(userId);
