@@ -33,9 +33,21 @@ const EnvSchema = z.object({
   // BILLING_PAYMENT_INSTRUCTIONS is set (a bill with no way to pay it is
   // refused by lib/billing/statements.ts, and a warning is logged at boot).
   BILLING_PAYMENT_INSTRUCTIONS: z.string().optional(), // bank details etc; "\\n" = line break
-  BILLING_DUE_DAYS: z.coerce.number().int().positive().max(365).optional(), // default 14
+  // Empty string (a blank var in Vercel) is treated as unset, not as 0.
+  BILLING_DUE_DAYS: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.coerce.number().int().positive().max(365).optional(),
+  ), // default 14
   BILLING_TIMEZONE: z.string().optional(),             // default Australia/Sydney
-  BILLING_AUTO_SEND: z.enum(['true', 'false']).optional(), // email statements automatically from the monthly cron
+  // Forgiving on purpose: TRUE / True / 1 / yes / on all mean true; FALSE / 0 / no / off / blank mean false.
+  // A typo in an optional flag must never stop the whole site from booting.
+  BILLING_AUTO_SEND: z.preprocess((v) => {
+    if (typeof v !== 'string') return v;
+    const t = v.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(t)) return 'true';
+    if (['false', '0', 'no', 'off', ''].includes(t)) return 'false';
+    return 'false'; // unrecognised → safest default (do NOT auto-send)
+  }, z.enum(['true', 'false']).optional()), // email statements automatically from the monthly cron
 
   // Email
   RESEND_API_KEY: z.string().min(1),

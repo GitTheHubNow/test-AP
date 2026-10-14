@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { isValidCronSecret } from '@/lib/timingSafe';
-import { generateAllStatements, sendStatement } from '@/lib/billing/statements';
+import { generateAllStatements, sendStatement, isAutoSendEnabled } from '@/lib/billing/statements';
 import { periodKeyFor, previousPeriodKey } from '@/lib/billing/period';
 import { getReviewSummary } from '@/lib/billing/adminSummary';
 import { notifyAdminBillsReady } from '@/lib/billing/adminNotify';
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     const results = await generateAllStatements(period);
 
     let sent = 0, sendFailed = 0;
-    if (process.env.BILLING_AUTO_SEND === 'true') {
+    if (isAutoSendEnabled()) {
       for (const r of results) {
         if ((r.outcome === 'created' || r.outcome === 'regenerated') && r.statementId) {
           const s = await sendStatement(r.statementId);

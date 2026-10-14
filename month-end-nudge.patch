@@ -1,0 +1,382 @@
+From 77b701be0a5eca79253c37c51bbfd3ddc72a84bf Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 06:35:49 +0000
+Subject: [PATCH] Month-end billing nudge: owner banner, 'bills ready' email,
+ send-all
+
+---
+ app/api/cron/billing/route.ts                 | 16 ++++++-
+ .../billing/statements/send-all/route.ts      | 29 ++++++++++++
+ app/dashboard/layout.tsx                      | 14 ++++++
+ app/dashboard/system/billing/page.tsx         | 25 ++++++++++
+ components/dashboard/BillingReviewBanner.tsx  | 46 +++++++++++++++++++
+ lib/auth/platformAdmin.ts                     |  4 ++
+ lib/billing/adminNotify.ts                    | 44 ++++++++++++++++++
+ lib/billing/adminSummary.ts                   | 43 +++++++++++++++++
+ lib/billing/statements.ts                     | 17 +++++++
+ 9 files changed, 236 insertions(+), 2 deletions(-)
+ create mode 100644 app/api/system/billing/statements/send-all/route.ts
+ create mode 100644 components/dashboard/BillingReviewBanner.tsx
+ create mode 100644 lib/billing/adminNotify.ts
+ create mode 100644 lib/billing/adminSummary.ts
+
+diff --git a/app/api/cron/billing/route.ts b/app/api/cron/billing/route.ts
+index 70a0589..c41f6fa 100644
+--- a/app/api/cron/billing/route.ts
++++ b/app/api/cron/billing/route.ts
+@@ -5,7 +5,8 @@
+  * statements for the month that just ended, for every site. By default it
+  * does NOT email them — review at /dashboard/system/billing and send when
+  * happy. Set BILLING_AUTO_SEND=true to email each new statement straight
+- * away instead.
++ * away instead. Either way the owner gets a "bills are ready" email, and a
++ * banner shows on the dashboard until every draft is sent.
+  *
+  * Replaces /api/cron/reset-usage: there are no monthly counters to reset
+  * any more, the usage ledger is the source of truth.
+@@ -18,6 +19,8 @@ import { NextRequest, NextResponse } from 'next/server';
+ import { isValidCronSecret } from '@/lib/timingSafe';
+ import { generateAllStatements, sendStatement } from '@/lib/billing/statements';
+ import { periodKeyFor, previousPeriodKey } from '@/lib/billing/period';
++import { getReviewSummary } from '@/lib/billing/adminSummary';
++import { notifyAdminBillsReady } from '@/lib/billing/adminNotify';
+ 
+ export async function GET(req: NextRequest) {
+   const authHeader = req.headers.get('authorization');
+@@ -43,12 +46,21 @@ export async function GET(req: NextRequest) {
+       }
+     }
+ 
++    // Heads-up email to the owner: drafts still waiting for review (all of
++    // them, if auto-send is off). A failed email never fails the run.
++    let notified = 0;
++    try {
++      notified = (await notifyAdminBillsReady(await getReviewSummary())).sent;
++    } catch (err) {
++      console.error('[cron/billing] admin notification failed:', err);
++    }
++
+     const count = (o: string) => results.filter((r) => r.outcome === o).length;
+     console.log(`[cron/billing] ${period}: created=${count('created')} regenerated=${count('regenerated')} skipped=${count('skipped')} errors=${count('error')} sent=${sent}`);
+     return NextResponse.json({
+       success: true, period,
+       created: count('created'), regenerated: count('regenerated'), skipped: count('skipped'),
+-      errors: count('error'), sent, sendFailed,
++      errors: count('error'), sent, sendFailed, notified,
+     });
+   } catch (error) {
+     console.error('[cron/billing]', error);
+diff --git a/app/api/system/billing/statements/send-all/route.ts b/app/api/system/billing/statements/send-all/route.ts
+new file mode 100644
+index 0000000..b15c88f
+--- /dev/null
++++ b/app/api/system/billing/statements/send-all/route.ts
+@@ -0,0 +1,29 @@
++/**
++ * POST /api/system/billing/statements/send-all   (platform admin only)
++ * Body: { period: 'YYYY-MM' }
++ *
++ * Emails every DRAFT statement for the month in one go. Statements that
++ * fail (no recipient, email error) stay DRAFT and are listed in the
++ * response so they can be fixed and retried — re-running only touches
++ * the remaining drafts, never re-sends ones already SENT.
++ */
++
++import { NextRequest, NextResponse } from 'next/server';
++import { withPlatformAdmin } from '@/lib/billing/routeHelpers';
++import { isValidPeriodKey } from '@/lib/billing/period';
++import { sendAllDrafts } from '@/lib/billing/statements';
++
++export async function POST(req: NextRequest) {
++  return withPlatformAdmin('POST /api/system/billing/statements/send-all', async () => {
++    const body = (await req.json().catch(() => ({}))) as { period?: unknown };
++    if (!isValidPeriodKey(body.period)) {
++      return NextResponse.json({ success: false, error: 'period must be YYYY-MM, e.g. 2026-09' }, { status: 400 });
++    }
++    const rows = await sendAllDrafts(body.period);
++    const failed = rows.filter((r) => !r.ok);
++    return NextResponse.json({
++      success: true,
++      data: { sent: rows.length - failed.length, failed: failed.length, failures: failed },
++    });
++  });
++}
+diff --git a/app/dashboard/layout.tsx b/app/dashboard/layout.tsx
+index 01f5393..4f4d24d 100644
+--- a/app/dashboard/layout.tsx
++++ b/app/dashboard/layout.tsx
+@@ -40,6 +40,8 @@ import { auth }              from '@clerk/nextjs/server';
+ import { redirect }          from 'next/navigation';
+ import Link                  from 'next/link';
+ import { getOrgContextForUser } from '@/lib/auth/getOrgForUser';
++import { isPlatformAdmin } from '@/lib/auth/platformAdmin';
++import { BillingReviewBanner } from '@/components/dashboard/BillingReviewBanner';
+ 
+ export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+   const { userId } = await auth();
+@@ -140,6 +142,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
+             Billing
+           </Link>
+ 
++          {isPlatformAdmin(userId) && (
++            <Link href="/dashboard/system/billing" className="sidebar-nav-item">
++              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
++                <line x1="12" y1="1" x2="12" y2="23"/>
++                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
++              </svg>
++              Billing (all sites)
++            </Link>
++          )}
++
+           {/* ── Support ── */}
+           <span className="sidebar-section-label" style={{ marginTop: '0.75rem' }}>Support</span>
+ 
+@@ -167,6 +179,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
+ 
+       {/* ── Main content ─────────────────────────────────────────────── */}
+       <div className="dash-content">
++        {/* Platform owner only: nudge when bills are ready to review/send */}
++        {isPlatformAdmin(userId) && <BillingReviewBanner />}
+         {children}
+       </div>
+ 
+diff --git a/app/dashboard/system/billing/page.tsx b/app/dashboard/system/billing/page.tsx
+index b4f7ddc..7764572 100644
+--- a/app/dashboard/system/billing/page.tsx
++++ b/app/dashboard/system/billing/page.tsx
+@@ -86,6 +86,26 @@ export default function SystemBillingPage() {
+     setEditing(null);
+   }
+ 
++  const drafts = (sites ?? []).filter((s) => s.statement?.status === 'DRAFT');
++  const draftTotal = drafts.reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
++
++  async function sendAll() {
++    if (!window.confirm(`Email ${drafts.length} bill${drafts.length === 1 ? '' : 's'} totalling ${money(draftTotal)} to the sites now?`)) return;
++    setBusy('sendall'); setMsg(null);
++    try {
++      const r = await fetch('/api/system/billing/statements/send-all', {
++        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period }),
++      }).then((x) => x.json());
++      if (!r.success) setMsg({ ok: false, text: r.error ?? 'Failed' });
++      else if (r.data.failed > 0) {
++        const names = r.data.failures.map((f: { number: string; error?: string }) => `${f.number}: ${f.error}`).join(' | ');
++        setMsg({ ok: false, text: `Sent ${r.data.sent}, but ${r.data.failed} failed and stay as drafts — ${names}` });
++      } else setMsg({ ok: true, text: `Sent ${r.data.sent} bill${r.data.sent === 1 ? '' : 's'}` });
++      load();
++    } catch { setMsg({ ok: false, text: 'Request failed' }); }
++    finally { setBusy(null); }
++  }
++
+   const total = (sites ?? []).reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
+ 
+   return (
+@@ -96,6 +116,11 @@ export default function SystemBillingPage() {
+         <button style={st.primary} disabled={busy === 'all'} onClick={() => generate()}>
+           {busy === 'all' ? 'Generating…' : 'Generate drafts for all sites'}
+         </button>
++        {drafts.length > 0 && (
++          <button style={{ ...st.primary, background: '#15803d' }} disabled={busy === 'sendall'} onClick={sendAll}>
++            {busy === 'sendall' ? 'Sending…' : `Send all ${drafts.length} drafts (${money(draftTotal)})`}
++          </button>
++        )}
+         <span style={st.muted}>Statements this month: {money(total)}</span>
+       </div>
+       {msg && <div style={{ ...st.msg, background: msg.ok ? '#dcfce7' : '#fee2e2', color: msg.ok ? '#166534' : '#991b1b' }}>{msg.text}</div>}
+diff --git a/components/dashboard/BillingReviewBanner.tsx b/components/dashboard/BillingReviewBanner.tsx
+new file mode 100644
+index 0000000..27f19da
+--- /dev/null
++++ b/components/dashboard/BillingReviewBanner.tsx
+@@ -0,0 +1,46 @@
++// components/dashboard/BillingReviewBanner.tsx
++//
++// Server component, rendered by app/dashboard/layout.tsx for PLATFORM
++// ADMINS ONLY. Shows when last month's bills are drafted and waiting, or
++// when sent bills are overdue. It needs no dismiss button: it vanishes on
++// its own once every draft has been sent.
++
++import Link from 'next/link';
++import { getReviewSummary } from '@/lib/billing/adminSummary';
++import { formatMoney } from '@/lib/billing/pricing';
++
++export async function BillingReviewBanner() {
++  let s;
++  try { s = await getReviewSummary(); }
++  catch (err) { console.error('[BillingReviewBanner]', err); return null; } // never break the dashboard over a banner
++
++  if (s.draftCount === 0 && s.overdueCount === 0) return null;
++
++  return (
++    <div style={{
++      margin: '1rem 2.5rem 0', maxWidth: 900,
++      background: 'rgba(201,169,110,0.10)', border: '1px solid rgba(201,169,110,0.45)',
++      borderRadius: 10, padding: '1rem 1.4rem',
++      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
++    }}>
++      <div>
++        {s.draftCount > 0 && (
++          <p style={{ margin: 0, fontSize: '0.9rem', color: '#f4f1ea' }}>
++            <strong>{s.periodLabel} bills are ready:</strong> {s.draftCount} statement{s.draftCount === 1 ? '' : 's'} · {formatMoney(s.draftCents)}. Not sent yet.
++          </p>
++        )}
++        {s.overdueCount > 0 && (
++          <p style={{ margin: s.draftCount > 0 ? '0.3rem 0 0' : 0, fontSize: '0.8rem', color: '#e8c17a' }}>
++            {s.overdueCount} sent statement{s.overdueCount === 1 ? ' is' : 's are'} overdue ({formatMoney(s.overdueCents)}).
++          </p>
++        )}
++      </div>
++      <Link href="/dashboard/system/billing" style={{
++        padding: '0.55rem 1.1rem', borderRadius: 6, whiteSpace: 'nowrap', textDecoration: 'none', fontSize: '0.8rem',
++        background: 'rgba(201,169,110,0.2)', border: '1px solid rgba(201,169,110,0.5)', color: '#cdba93',
++      }}>
++        Review &amp; send
++      </Link>
++    </div>
++  );
++}
+diff --git a/lib/auth/platformAdmin.ts b/lib/auth/platformAdmin.ts
+index da998de..639525c 100644
+--- a/lib/auth/platformAdmin.ts
++++ b/lib/auth/platformAdmin.ts
+@@ -17,6 +17,10 @@ const PLATFORM_ADMIN_IDS = (process.env.PLATFORM_ADMIN_USER_IDS ?? '')
+   .map((id) => id.trim())
+   .filter(Boolean);
+ 
++export function getPlatformAdminIds(): string[] {
++  return [...PLATFORM_ADMIN_IDS];
++}
++
+ export function isPlatformAdmin(userId: string | null | undefined): boolean {
+   if (!userId) return false;
+   return PLATFORM_ADMIN_IDS.includes(userId);
+diff --git a/lib/billing/adminNotify.ts b/lib/billing/adminNotify.ts
+new file mode 100644
+index 0000000..be07da0
+--- /dev/null
++++ b/lib/billing/adminNotify.ts
+@@ -0,0 +1,44 @@
++// lib/billing/adminNotify.ts
++//
++// The monthly "your bills are ready" email to the platform owner(s).
++// Sent by /api/cron/billing after drafts are generated, so the 1st of the
++// month brings the reminder to you rather than relying on you remembering.
++
++import { clerkClient } from '@clerk/nextjs/server';
++import { sendEmail, getAppUrl } from '@/lib/email';
++import { escapeHtml } from '@/lib/htmlEscape';
++import { getPlatformAdminIds } from '@/lib/auth/platformAdmin';
++import { formatMoney } from '@/lib/billing/pricing';
++import type { ReviewSummary } from '@/lib/billing/adminSummary';
++
++export async function notifyAdminBillsReady(s: ReviewSummary): Promise<{ sent: number }> {
++  if (s.draftCount === 0) return { sent: 0 };
++
++  const url = `${getAppUrl()}/dashboard/system/billing`;
++  const subject = `${s.periodLabel} bills are ready to review (${s.draftCount} · ${formatMoney(s.draftCents)})`;
++  const html = `<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;padding:32px;color:#1a1714;">
++    <h2 style="margin:0 0 12px;">${escapeHtml(s.periodLabel)} bills are ready</h2>
++    <p style="font-size:15px;line-height:1.6;color:#4a4540;">
++      <strong>${s.draftCount}</strong> statement${s.draftCount === 1 ? '' : 's'} totalling
++      <strong>${escapeHtml(formatMoney(s.draftCents))}</strong> have been drafted from last month's usage.
++      Nothing has been sent to any site yet.
++    </p>
++    ${s.overdueCount > 0 ? `<p style="font-size:14px;color:#92400e;">${s.overdueCount} earlier statement${s.overdueCount === 1 ? ' is' : 's are'} overdue (${escapeHtml(formatMoney(s.overdueCents))}).</p>` : ''}
++    <p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 22px;background:#1a1714;color:#fff;border-radius:6px;text-decoration:none;">Review &amp; send bills</a></p>
++  </div>`;
++
++  const clerk = await clerkClient();
++  let sent = 0;
++  for (const id of getPlatformAdminIds()) {
++    try {
++      const u = await clerk.users.getUser(id);
++      const to = (u.emailAddresses.find((e) => e.id === u.primaryEmailAddressId) ?? u.emailAddresses[0])?.emailAddress;
++      if (!to) continue;
++      const r = await sendEmail({ to, subject, html });
++      if (r.success) sent++;
++    } catch (err) {
++      console.error(`[billing] could not notify admin ${id}:`, err);
++    }
++  }
++  return { sent };
++}
+diff --git a/lib/billing/adminSummary.ts b/lib/billing/adminSummary.ts
+new file mode 100644
+index 0000000..0723610
+--- /dev/null
++++ b/lib/billing/adminSummary.ts
+@@ -0,0 +1,43 @@
++// lib/billing/adminSummary.ts
++//
++// "What needs the owner's attention?" — drives the dashboard banner and the
++// monthly heads-up email. Drafts are always for the month that just closed;
++// overdue covers any SENT statement past its due date, from any month.
++
++import { prisma } from '@/lib/prisma';
++import { periodKeyFor, previousPeriodKey, formatPeriodLabel } from '@/lib/billing/period';
++
++export interface ReviewSummary {
++  period:        string;
++  periodLabel:   string;
++  draftCount:    number;
++  draftCents:    number;
++  overdueCount:  number;
++  overdueCents:  number;
++}
++
++export async function getReviewSummary(now: Date = new Date()): Promise<ReviewSummary> {
++  const period = previousPeriodKey(periodKeyFor(now));
++
++  const [drafts, overdue] = await Promise.all([
++    prisma.billingStatement.aggregate({
++      where:  { periodKey: period, status: 'DRAFT' },
++      _count: { _all: true },
++      _sum:   { totalCents: true },
++    }),
++    prisma.billingStatement.aggregate({
++      where:  { status: 'SENT', dueAt: { lt: now } },
++      _count: { _all: true },
++      _sum:   { totalCents: true },
++    }),
++  ]);
++
++  return {
++    period,
++    periodLabel:  formatPeriodLabel(period),
++    draftCount:   drafts._count._all,
++    draftCents:   drafts._sum.totalCents ?? 0,
++    overdueCount: overdue._count._all,
++    overdueCents: overdue._sum.totalCents ?? 0,
++  };
++}
+diff --git a/lib/billing/statements.ts b/lib/billing/statements.ts
+index 0d2a6e5..d651067 100644
+--- a/lib/billing/statements.ts
++++ b/lib/billing/statements.ts
+@@ -275,6 +275,23 @@ export async function sendStatement(statementId: string, opts: { resend?: boolea
+   return { ok: true, statement: updated, sentTo: delivered };
+ }
+ 
++export interface SendAllRow { statementId: string; number: string; ok: boolean; error?: string }
++
++/** Email every DRAFT statement for a month. One failure never stops the rest; failed ones stay DRAFT to retry. */
++export async function sendAllDrafts(periodKey: string): Promise<SendAllRow[]> {
++  const drafts = await prisma.billingStatement.findMany({
++    where:   { periodKey, status: 'DRAFT' },
++    select:  { id: true, number: true },
++    orderBy: { createdAt: 'asc' },
++  });
++  const rows: SendAllRow[] = [];
++  for (const d of drafts) {
++    const r = await sendStatement(d.id);
++    rows.push(r.ok ? { statementId: d.id, number: d.number, ok: true } : { statementId: d.id, number: d.number, ok: false, error: r.error });
++  }
++  return rows;
++}
++
+ // ── Mark paid / void ─────────────────────────────────────────────────────────
+ 
+ export type TransitionResult =
+-- 
+2.43.0
+

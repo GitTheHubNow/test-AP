@@ -163,6 +163,11 @@ export async function generateAllStatements(
 
 // ── Send ─────────────────────────────────────────────────────────────────────
 
+/** BILLING_AUTO_SEND, case-insensitive. Anything unrecognised means OFF. */
+export function isAutoSendEnabled(): boolean {
+  return ['true', '1', 'yes', 'on'].includes((process.env.BILLING_AUTO_SEND ?? '').trim().toLowerCase());
+}
+
 export function getPaymentInstructions(): string {
   // Env vars are single-line; allow a literal "\n" to mean a line break.
   return (process.env.BILLING_PAYMENT_INSTRUCTIONS ?? '').replace(/\\n/g, '\n').trim();

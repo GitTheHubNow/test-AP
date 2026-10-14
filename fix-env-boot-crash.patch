@@ -1,0 +1,152 @@
+From fa166c6d543adca0a0a30d048d75aeb53362281f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 07:47:23 +0000
+Subject: [PATCH] Fix boot crash: make BILLING_AUTO_SEND/BILLING_DUE_DAYS
+ forgiving (FALSE, blank, typos)
+
+---
+ app/api/cron/billing/route.ts     |  4 +-
+ lib/__tests__/env-billing.test.ts | 63 +++++++++++++++++++++++++++++++
+ lib/billing/statements.ts         |  5 +++
+ lib/env.ts                        | 16 +++++++-
+ 4 files changed, 84 insertions(+), 4 deletions(-)
+ create mode 100644 lib/__tests__/env-billing.test.ts
+
+diff --git a/app/api/cron/billing/route.ts b/app/api/cron/billing/route.ts
+index c41f6fa..efedd91 100644
+--- a/app/api/cron/billing/route.ts
++++ b/app/api/cron/billing/route.ts
+@@ -17,7 +17,7 @@
+ 
+ import { NextRequest, NextResponse } from 'next/server';
+ import { isValidCronSecret } from '@/lib/timingSafe';
+-import { generateAllStatements, sendStatement } from '@/lib/billing/statements';
++import { generateAllStatements, sendStatement, isAutoSendEnabled } from '@/lib/billing/statements';
+ import { periodKeyFor, previousPeriodKey } from '@/lib/billing/period';
+ import { getReviewSummary } from '@/lib/billing/adminSummary';
+ import { notifyAdminBillsReady } from '@/lib/billing/adminNotify';
+@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
+     const results = await generateAllStatements(period);
+ 
+     let sent = 0, sendFailed = 0;
+-    if (process.env.BILLING_AUTO_SEND === 'true') {
++    if (isAutoSendEnabled()) {
+       for (const r of results) {
+         if ((r.outcome === 'created' || r.outcome === 'regenerated') && r.statementId) {
+           const s = await sendStatement(r.statementId);
+diff --git a/lib/__tests__/env-billing.test.ts b/lib/__tests__/env-billing.test.ts
+new file mode 100644
+index 0000000..3678093
+--- /dev/null
++++ b/lib/__tests__/env-billing.test.ts
+@@ -0,0 +1,63 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++
++vi.mock('@/lib/prisma', () => ({ prisma: {} }));
++vi.mock('@clerk/nextjs/server', () => ({ clerkClient: vi.fn() }));
++vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(), getAppUrl: () => 'http://x' }));
++
++import { isAutoSendEnabled } from '../billing/statements';
++
++const VALID = {
++  DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
++  CLERK_SECRET_KEY: 'sk_test_x',
++  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_x',
++  RESEND_API_KEY: 're_x',
++  CRON_SECRET: 'c'.repeat(40),
++  FAMILY_SESSION_SECRET: 'f'.repeat(40),
++  NODE_ENV: 'test',
++};
++
++describe('billing env flags never stop the site booting', () => {
++  const saved = { ...process.env };
++  beforeEach(() => { vi.resetModules(); Object.assign(process.env, VALID); });
++  afterEach(() => { process.env = { ...saved }; });
++
++  const boot = async (extra: Record<string, string>) => {
++    Object.assign(process.env, extra);
++    const { getEnv } = await import('../env');
++    return getEnv();
++  };
++
++  // The exact value that took production down.
++  it('accepts BILLING_AUTO_SEND=FALSE', async () => {
++    expect((await boot({ BILLING_AUTO_SEND: 'FALSE' })).BILLING_AUTO_SEND).toBe('false');
++  });
++  it('accepts TRUE / True / 1 as true', async () => {
++    for (const v of ['TRUE', 'True', '1']) {
++      vi.resetModules();
++      expect((await boot({ BILLING_AUTO_SEND: v })).BILLING_AUTO_SEND).toBe('true');
++    }
++  });
++  it('treats garbage or blank as false instead of crashing', async () => {
++    for (const v of ['banana', '']) {
++      vi.resetModules();
++      expect((await boot({ BILLING_AUTO_SEND: v })).BILLING_AUTO_SEND).toBe('false');
++    }
++  });
++  it('treats a blank BILLING_DUE_DAYS as unset, not 0', async () => {
++    expect((await boot({ BILLING_DUE_DAYS: '' })).BILLING_DUE_DAYS).toBeUndefined();
++  });
++  it('still reads a real BILLING_DUE_DAYS', async () => {
++    expect((await boot({ BILLING_DUE_DAYS: '21' })).BILLING_DUE_DAYS).toBe(21);
++  });
++});
++
++describe('isAutoSendEnabled (used by the monthly cron)', () => {
++  const orig = process.env.BILLING_AUTO_SEND;
++  afterEach(() => { if (orig === undefined) delete process.env.BILLING_AUTO_SEND; else process.env.BILLING_AUTO_SEND = orig; });
++
++  for (const [v, want] of [['true', true], ['TRUE', true], [' True ', true], ['1', true], ['yes', true],
++                           ['false', false], ['FALSE', false], ['', false], ['banana', false]] as const) {
++    it(`"${v}" → ${want}`, () => { process.env.BILLING_AUTO_SEND = v; expect(isAutoSendEnabled()).toBe(want); });
++  }
++  it('unset → false', () => { delete process.env.BILLING_AUTO_SEND; expect(isAutoSendEnabled()).toBe(false); });
++});
+diff --git a/lib/billing/statements.ts b/lib/billing/statements.ts
+index d651067..00510d1 100644
+--- a/lib/billing/statements.ts
++++ b/lib/billing/statements.ts
+@@ -163,6 +163,11 @@ export async function generateAllStatements(
+ 
+ // ── Send ─────────────────────────────────────────────────────────────────────
+ 
++/** BILLING_AUTO_SEND, case-insensitive. Anything unrecognised means OFF. */
++export function isAutoSendEnabled(): boolean {
++  return ['true', '1', 'yes', 'on'].includes((process.env.BILLING_AUTO_SEND ?? '').trim().toLowerCase());
++}
++
+ export function getPaymentInstructions(): string {
+   // Env vars are single-line; allow a literal "\n" to mean a line break.
+   return (process.env.BILLING_PAYMENT_INSTRUCTIONS ?? '').replace(/\\n/g, '\n').trim();
+diff --git a/lib/env.ts b/lib/env.ts
+index b22acf6..d84c762 100644
+--- a/lib/env.ts
++++ b/lib/env.ts
+@@ -33,9 +33,21 @@ const EnvSchema = z.object({
+   // BILLING_PAYMENT_INSTRUCTIONS is set (a bill with no way to pay it is
+   // refused by lib/billing/statements.ts, and a warning is logged at boot).
+   BILLING_PAYMENT_INSTRUCTIONS: z.string().optional(), // bank details etc; "\\n" = line break
+-  BILLING_DUE_DAYS: z.coerce.number().int().positive().max(365).optional(), // default 14
++  // Empty string (a blank var in Vercel) is treated as unset, not as 0.
++  BILLING_DUE_DAYS: z.preprocess(
++    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
++    z.coerce.number().int().positive().max(365).optional(),
++  ), // default 14
+   BILLING_TIMEZONE: z.string().optional(),             // default Australia/Sydney
+-  BILLING_AUTO_SEND: z.enum(['true', 'false']).optional(), // email statements automatically from the monthly cron
++  // Forgiving on purpose: TRUE / True / 1 / yes / on all mean true; FALSE / 0 / no / off / blank mean false.
++  // A typo in an optional flag must never stop the whole site from booting.
++  BILLING_AUTO_SEND: z.preprocess((v) => {
++    if (typeof v !== 'string') return v;
++    const t = v.trim().toLowerCase();
++    if (['true', '1', 'yes', 'on'].includes(t)) return 'true';
++    if (['false', '0', 'no', 'off', ''].includes(t)) return 'false';
++    return 'false'; // unrecognised → safest default (do NOT auto-send)
++  }, z.enum(['true', 'false']).optional()), // email statements automatically from the monthly cron
+ 
+   // Email
+   RESEND_API_KEY: z.string().min(1),
+-- 
+2.43.0
+
