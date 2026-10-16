@@ -1,4 +1,6 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import { classifyPath, edgeDecision, isApiPath, parseEdgeAuthMode } from '@/lib/edgeAuth';
 
 // R2/CDN origin for uploaded photos/videos/logos — only set in production
 // (dev serves from local disk, already covered by 'self'). Guarded so an
@@ -6,7 +8,49 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 // the CSP's img-src.
 const cdnOrigin = process.env.NEXT_PUBLIC_CDN_URL;
 
-export default clerkMiddleware({
+// EDGE ROUTE PROTECTION (defence in depth) — see lib/edgeAuth.ts for the full
+// rationale and the path lists. Every page and API route STILL authenticates and
+// authorises itself; this layer only guarantees that a signed-out request never
+// reaches the protected ones, so a future route that forgets its own check is
+// not automatically public.
+//
+// EDGE_AUTH_MODE:
+//   log     (DEFAULT) blocks nothing; logs "[edge-auth] WOULD BLOCK …" for every
+//           signed-out request that enforce mode would stop. Safe to deploy.
+//   enforce signed-out → API paths get 401 JSON, pages redirect to /sign-in.
+//           Unrecognised paths are blocked too (deny by default).
+//   off     does nothing (emergency switch — no redeploy of code needed).
+// Roll-out: ship in `log`, watch the logs while using the app, then set
+// EDGE_AUTH_MODE=enforce in Vercel and redeploy.
+export default clerkMiddleware(async (auth, req) => {
+  const mode = parseEdgeAuthMode(process.env.EDGE_AUTH_MODE);
+  if (mode === 'off') return;
+
+  const { pathname } = req.nextUrl;
+  if (classifyPath(pathname) === 'public') return; // skip the session lookup entirely
+
+  const session  = await auth();
+  const decision = edgeDecision(pathname, mode, !!session.userId);
+
+  if (decision === 'block') {
+    // x-edge-auth marks responses produced HERE (vs. by a route's own check),
+    // so a 401 can be traced to the layer that issued it.
+    if (isApiPath(pathname)) {
+      return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401, headers: { 'x-edge-auth': 'blocked' } });
+    }
+    // Built by hand (not session.redirectToSignIn, which is typed to throw and
+    // so can't be inspected or tagged). redirect_url is Clerk's own parameter;
+    // it carries a same-site PATH only, never a full URL (no open redirect).
+    const signIn = new URL(process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in', req.url);
+    signIn.searchParams.set('redirect_url', req.nextUrl.pathname + req.nextUrl.search);
+    return NextResponse.redirect(signIn, { headers: { 'x-edge-auth': 'blocked' } });
+  }
+
+  if (decision === 'allow-and-log') {
+    // Pathname only — never the query string, which can carry tokens.
+    console.warn(`[edge-auth] WOULD BLOCK ${req.method} ${pathname} (signed out; EDGE_AUTH_MODE=log, nothing was blocked)`);
+  }
+}, {
   contentSecurityPolicy: {
     // Was previously not configured at all — see the old comment this
     // replaced: the blocker (requires @clerk/nextjs >= 6.14.0) was
@@ -30,8 +74,15 @@ export default clerkMiddleware({
       // syntax itself but not fetching the stylesheet cross-origin;
       // there's no default font-src at all, which falls back to
       // default-src 'self' and would block the font files themselves.
+      //
+      // font-src NEEDS 'self' TOO. Declaring font-src REPLACES the
+      // default-src fallback rather than adding to it, so listing only
+      // fonts.gstatic.com silently blocked every font served from this
+      // origin — including fonts self-hosted by next/font (the landing
+      // page's Plus Jakarta Sans), which would have fallen back to a system
+      // font in production with no error anyone would see.
       'style-src': ['https://fonts.googleapis.com'],
-      'font-src':  ['https://fonts.gstatic.com'],
+      'font-src':  ["'self'", 'https://fonts.gstatic.com'],
     },
   },
 });

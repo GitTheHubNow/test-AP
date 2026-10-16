@@ -8,9 +8,11 @@ interface Props {
   token:             string;
   memorial:          { id: string; title: string };
   familyContactName: string | null;
+  /** Masked address the link was sent to, e.g. "j***@gmail.com". */
+  emailHint?:        string;
 }
 
-export function HandoverAcceptClient({ token, memorial, familyContactName }: Props) {
+export function HandoverAcceptClient({ token, memorial, familyContactName, emailHint }: Props) {
   const router               = useRouter();
   const { user }             = useUser();
   const [accepting, setAccepting] = useState(false);
@@ -75,6 +77,12 @@ export function HandoverAcceptClient({ token, memorial, familyContactName }: Pro
         <strong style={{ color: '#1a1714' }}>{memorial.title}</strong> to you.
         Once you accept, you will have full control of this memorial.
       </p>
+      {emailHint && (
+        <p style={{ fontSize: '0.85rem', color: '#7c6d5a', fontFamily: 'Georgia, serif', lineHeight: 1.7, margin: '-1rem 0 2rem' }}>
+          For your security, this link was sent to <strong>{emailHint}</strong>. You&apos;ll need to
+          sign in or sign up with that email address to accept.
+        </p>
+      )}
 
       <div style={cardStyle}>
 

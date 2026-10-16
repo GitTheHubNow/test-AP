@@ -3,6 +3,7 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
+import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { getPublicUrl } from '@/lib/upload-shared';
 import { ensurePublicToken } from '@/lib/qr';
 import { AppearanceEditor } from '@/components/memorial/AppearanceEditor';
@@ -14,8 +15,18 @@ export default async function AppearancePage({ params }: { params: Promise<{ mem
   const { userId } = await auth();
   if (!userId) notFound();
 
-  const memorial = await prisma.memorial.findFirst({
-    where: { id: memorialId, ownerId: userId },
+  // Was `where: { id, ownerId: userId }`: only the staff member who CREATED the
+  // memorial could open this page (colleagues got a 404), and after a direct
+  // handover that creator is still ownerId — so it also let them straight past
+  // the handed-over cut-off. assertMemorialAccess applies the real rules.
+  try {
+    await assertMemorialAccess(memorialId, userId, 'edit');
+  } catch {
+    notFound();
+  }
+
+  const memorial = await prisma.memorial.findUnique({
+    where: { id: memorialId },
     select: {
       id:           true,
       firstName:    true,

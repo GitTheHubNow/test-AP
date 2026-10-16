@@ -13,6 +13,16 @@ import { saveUploadedFile } from '@/lib/storage-server';
 import { verifyFileContent } from '@/lib/file-validation';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
 
+const MAX_DESCRIPTION_LEN = 10_000;
+const MAX_HERO_BYTES       = 10 * 1024 * 1024; // 10 MB
+
+/** '' → null (clear the field); a valid date string → Date; anything else → undefined (reject). */
+function parseOptionalDate(v: string): Date | null | undefined {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ memorialId: string }> }
@@ -43,6 +53,9 @@ export async function PATCH(
       const file = formData.get('heroImage');
 
       if (file instanceof File) {
+        if (file.size > MAX_HERO_BYTES) {
+          return NextResponse.json({ success: false, error: 'Photo must be 10 MB or smaller' }, { status: 413 });
+        }
         const buffer = Buffer.from(await file.arrayBuffer());
         const contentCheck = verifyFileContent(buffer, file.type);
         if (!contentCheck.valid) {
@@ -53,21 +66,49 @@ export async function PATCH(
       }
 
       const description = formData.get('description');
-      if (typeof description === 'string') updateData.description = description || null;
+      if (typeof description === 'string') {
+        if (description.length > MAX_DESCRIPTION_LEN) {
+          return NextResponse.json({ success: false, error: 'Description is too long' }, { status: 400 });
+        }
+        updateData.description = description || null;
+      }
 
       const birthDate = formData.get('birthDate');
-      if (typeof birthDate === 'string') updateData.birthDate = birthDate ? new Date(birthDate) : null;
+      if (typeof birthDate === 'string') {
+        const d = parseOptionalDate(birthDate);
+        if (d === undefined) return NextResponse.json({ success: false, error: 'Invalid birth date' }, { status: 400 });
+        updateData.birthDate = d;
+      }
 
       const deathDate = formData.get('deathDate');
-      if (typeof deathDate === 'string') updateData.deathDate = deathDate ? new Date(deathDate) : null;
+      if (typeof deathDate === 'string') {
+        const d = parseOptionalDate(deathDate);
+        if (d === undefined) return NextResponse.json({ success: false, error: 'Invalid death date' }, { status: 400 });
+        updateData.deathDate = d;
+      }
 
     } else {
       // Text-only update — dates/bio without a new photo.
-      const body: { description?: string; birthDate?: string; deathDate?: string } = await request.json();
+      let body: { description?: string; birthDate?: string; deathDate?: string };
+      try { body = await request.json(); }
+      catch { return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 }); }
 
-      if (body.description !== undefined) updateData.description = body.description || null;
-      if (body.birthDate !== undefined) updateData.birthDate = body.birthDate ? new Date(body.birthDate) : null;
-      if (body.deathDate !== undefined) updateData.deathDate = body.deathDate ? new Date(body.deathDate) : null;
+      if (body.description !== undefined) {
+        if (typeof body.description !== 'string' || body.description.length > MAX_DESCRIPTION_LEN) {
+          return NextResponse.json({ success: false, error: 'Invalid or too-long description' }, { status: 400 });
+        }
+        updateData.description = body.description || null;
+      }
+      if (body.birthDate !== undefined) {
+        const d = typeof body.birthDate === 'string' ? parseOptionalDate(body.birthDate) : undefined;
+        if (d === undefined) return NextResponse.json({ success: false, error: 'Invalid birth date' }, { status: 400 });
+        updateData.birthDate = d;
+      }
+      if (body.deathDate !== undefined) {
+        const d = typeof body.deathDate === 'string' ? parseOptionalDate(body.deathDate) : undefined;
+        if (d === undefined) return NextResponse.json({ success: false, error: 'Invalid death date' }, { status: 400 });
+        updateData.deathDate = d;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {

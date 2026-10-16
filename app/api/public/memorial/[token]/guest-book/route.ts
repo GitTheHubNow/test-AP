@@ -13,8 +13,8 @@
 // and what the staff moderation routes (guestbook/[entryId]/approve etc.,
 // which ARE present and working) already expect to moderate.
 //
-// Unlike Memory (always PENDING — see the ./memory route), entries here
-// auto-approve. GuestBookForm's own handling reads this optimistically
+// Entries are now held for review (PENDING) exactly like Memory — see
+// lib/moderation.ts. They previously auto-approved. GuestBookForm's own handling reads this optimistically
 // (`data.data?.entry?.status === 'APPROVED'`) without enforcing it, and
 // its code comment calls this out explicitly ("unlike guest book, which
 // can auto-show") — a guest book is meant to be a lower-friction "we were
@@ -28,7 +28,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { GuestBookStatus, MemorialStatus } from '@prisma/client';
+import { initialPublicStatus } from '@/lib/moderation';
+import { MemorialStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode, createAuditEvent } from '@/lib/audit';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -64,7 +65,7 @@ export async function POST(
 
   const memorial = await prisma.memorial.findFirst({
     where:  { slug },
-    select: { id: true, status: true },
+    select: { id: true, status: true, workflowStage: true },
   });
   if (!memorial) {
     return NextResponse.json({ success: false, error: 'Memorial not found' }, { status: 404 });
@@ -97,7 +98,9 @@ export async function POST(
       authorName,
       message,
       location,
-      status:          GuestBookStatus.APPROVED,
+      // Held for review by default — see lib/moderation.ts for why, and for
+      // the one exception (handed-over memorials).
+      status:          initialPublicStatus(memorial.workflowStage),
       ipHash:          hashIp(request),
       flaggedByFilter: false,
       filterReason:    null,

@@ -30,7 +30,7 @@ export async function POST(
   }
 
   try {
-    await assertMemorialAccess(memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit', { allowAfterHandover: true });
   } catch (err) {
     return handleAuthError(err);
   }
@@ -58,7 +58,7 @@ export async function DELETE(
   }
 
   try {
-    await assertMemorialAccess(memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit', { allowAfterHandover: true });
   } catch (err) {
     return handleAuthError(err);
   }

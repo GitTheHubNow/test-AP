@@ -18,7 +18,7 @@ export default async function HandoverPage({ params }: Props) {
   // FIXED: previously a manual `ownerId !== userId` check, which blocked
   // every org staff member except the literal creator.
   try {
-    await assertMemorialAccess(memorialId, userId, 'edit');
+    await assertMemorialAccess(memorialId, userId, 'edit', { allowAfterHandover: true });
   } catch {
     notFound();
   }

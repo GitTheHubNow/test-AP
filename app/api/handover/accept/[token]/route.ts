@@ -16,7 +16,8 @@
 //     the transaction has already committed by this point.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
+import { hasMatchingVerifiedEmail, maskEmail } from '@/lib/handoverEmail';
 import { prisma } from '@/lib/prisma';
 import { HandoverStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
@@ -26,6 +27,8 @@ import {
   sendHandoverAcceptedToFH,
   sendHandoverAcceptedToFamily,
 } from '@/lib/email/send';
+
+class HandoverAlreadyClaimedError extends Error {}
 
 /**
  * GET /api/handover/accept/[token]
@@ -83,6 +86,10 @@ export async function GET(
       memorial:          handover.memorial,
       familyContactName: handover.familyContactName,
       status:            handover.status,
+      // Masked ("j***@gmail.com") so the page can tell the family which
+      // address to sign in with, without exposing the full address to anyone
+      // who merely holds the link.
+      emailHint:         maskEmail(handover.familyContactEmail),
     },
   });
 }
@@ -151,24 +158,53 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'The original owner cannot accept the handover' }, { status: 403 });
   }
 
+  // THE LINK ALONE IS NOT ENOUGH. It is a bearer token: before this check,
+  // whoever opened a forwarded or intercepted email first — signed in to ANY
+  // account — became the owner of a family's memorial. The signed-in account
+  // must now own a VERIFIED email address equal to the family contact email
+  // the funeral home entered. Fails closed: if Clerk can't be reached we do
+  // not guess.
+  let accountEmails;
+  try {
+    const clerk = await clerkClient();
+    accountEmails = (await clerk.users.getUser(userId)).emailAddresses;
+  } catch (err) {
+    console.error('[POST /api/handover/accept] could not load account emails:', err);
+    return NextResponse.json(
+      { success: false, error: 'We could not verify your email address just now. Please try again in a moment.', code: 'VERIFY_UNAVAILABLE' },
+      { status: 503 },
+    );
+  }
+  if (!hasMatchingVerifiedEmail(accountEmails, handover.familyContactEmail)) {
+    console.warn(`[handover/accept] email mismatch for handover ${handover.id} (user ${userId})`);
+    return NextResponse.json(
+      {
+        success: false,
+        code:    'EMAIL_MISMATCH',
+        error:   `This link was sent to ${maskEmail(handover.familyContactEmail)}. Please sign in or sign up with that email address to accept it. If you'd like to use a different address, ask the funeral home to send the link again to it.`,
+      },
+      { status: 403 },
+    );
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
+      // ATOMIC CLAIM. The status checks above ran outside this transaction, so
+      // two simultaneous requests (a double-click, or a forwarded link opened
+      // by two people) could both pass them and both transfer ownership — last
+      // writer wins. This conditional update succeeds for exactly one caller.
+      const claimed = await tx.memorialHandover.updateMany({
+        where: { id: handover.id, status: { notIn: [HandoverStatus.COMPLETED, HandoverStatus.CANCELLED] } },
+        data:  { status: HandoverStatus.COMPLETED, completedAt: new Date(), familyClerkUserId: userId },
+      });
+      if (claimed.count === 0) throw new HandoverAlreadyClaimedError();
+
       // Transfer ownership
       await tx.memorial.update({
         where: { id: handover.memorialId },
         data: {
           ownerId:       userId,
           workflowStage: 'HANDED_OVER',
-        },
-      });
-
-      // Mark handover complete
-      await tx.memorialHandover.update({
-        where: { id: handover.id },
-        data: {
-          status:            HandoverStatus.COMPLETED,
-          completedAt:       new Date(),
-          familyClerkUserId: userId,
         },
       });
 
@@ -260,6 +296,9 @@ export async function POST(
     });
 
   } catch (error) {
+    if (error instanceof HandoverAlreadyClaimedError) {
+      return NextResponse.json({ success: false, error: 'Already completed' }, { status: 409 });
+    }
     console.error('[POST /api/handover/accept/[token]]', error);
     return NextResponse.json({ success: false, error: 'Failed to complete handover' }, { status: 500 });
   }

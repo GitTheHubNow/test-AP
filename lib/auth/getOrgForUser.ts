@@ -127,18 +127,73 @@ export async function assertOrgAdmin(
  *   MEMBER  → read + edit own memorials within org
  *   ADMIN/OWNER → read + edit + delete all org memorials
  */
+export interface MemorialAccessOptions {
+  /**
+   * Let funeral-home staff through even after the memorial has been handed
+   * over. ONLY for the few routes that exist to manage the handover itself
+   * (resend / revoke the family's access card, read handover status) —
+   * never for anything that touches the memorial's content.
+   */
+  allowAfterHandover?: boolean;
+}
+
 export async function assertMemorialAccess(
   memorialId: string,
   userId: string,
   action: 'read' | 'edit' | 'delete' = 'read',
+  opts: MemorialAccessOptions = {},
 ): Promise<void> {
   const memorial = await prisma.memorial.findUnique({
     where:  { id: memorialId },
-    select: { ownerId: true, organisationId: true },
+    select: { ownerId: true, organisationId: true, workflowStage: true },
   });
 
   if (!memorial) {
     throw Object.assign(new Error('Memorial not found'), { status: 404 });
+  }
+
+  // ── Handed over to the family: the funeral home's access has ENDED ────────
+  // Without this, handover changed only who the family is told owns the
+  // memorial — every member of the funeral home's organisation still passed
+  // the membership check below and could read, edit, moderate and delete it.
+  //
+  // Two handover paths exist and they differ in who `ownerId` is afterwards:
+  //   · Clerk accept   → ownerId becomes the family's own account.
+  //   · Direct complete → ownerId stays the staff creator; the family works
+  //                       through the separate family-access (cookie) system.
+  // So "is the owner" can't be the test on its own — the staff creator is
+  // still ownerId in the second case. The family's Clerk account is the only
+  // identity allowed through this guard once a memorial is handed over.
+  if (memorial.workflowStage === 'HANDED_OVER' && !opts.allowAfterHandover) {
+    const handover = await prisma.memorialHandover.findUnique({
+      where:  { memorialId },
+      select: { familyClerkUserId: true },
+    });
+    const isFamilyAccount = handover?.familyClerkUserId === userId;
+
+    // Fallback for a transferred owner whose handover row is missing or has no
+    // familyClerkUserId: still the family if they own it and are NOT staff of
+    // the organisation that handed it over.
+    let isNonStaffOwner = false;
+    if (!isFamilyAccount && memorial.ownerId === userId) {
+      if (!memorial.organisationId) {
+        isNonStaffOwner = true;
+      } else {
+        const staff = await prisma.orgMember.findUnique({
+          where:  { organisationId_userId: { organisationId: memorial.organisationId, userId } },
+          select: { role: true },
+        });
+        isNonStaffOwner = !staff;
+      }
+    }
+
+    if (!isFamilyAccount && !isNonStaffOwner) {
+      throw Object.assign(
+        new Error('This memorial has been handed over to the family. Your access to manage it has ended.'),
+        { status: 403 },
+      );
+    }
+    return;
   }
 
   // Direct owner always has full access

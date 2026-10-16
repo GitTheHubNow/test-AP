@@ -137,6 +137,9 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
   const [location, setLocation] = useState('');
   const [state,    setState]    = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [errMsg,   setErrMsg]   = useState('');
+  // true when the entry was accepted but is being held for review, so the
+  // visitor isn't left wondering why their message isn't showing.
+  const [held,     setHeld]     = useState(false);
 
   async function handleSubmit() {
     if (!message.trim() || state === 'submitting') return;
@@ -155,6 +158,7 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed');
+      setHeld(data.data?.entry?.status !== 'APPROVED');
       setState('done');
 
       if (data.data?.entry?.status === 'APPROVED') {
@@ -188,7 +192,9 @@ function GuestBookForm({ token, onSubmitted }: { token: string; onSubmitted: (en
       <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(201,169,110,0.06)', borderRadius: 10, border: '1px solid rgba(201,169,110,0.2)' }}>
         <p style={{ color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '1rem', marginBottom: '0.5rem' }}>✦ Thank you</p>
         <p style={{ color: '#8a8070', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
-          Your message has been received.
+          {held
+            ? 'Your message has been received and will appear once the family has had a chance to review it.'
+            : 'Your message has been received.'}
         </p>
         <button onClick={() => { setState('idle'); setName(''); setMessage(''); setLocation(''); }}
           style={{ marginTop: '1rem', background: 'none', border: '1px solid rgba(201,169,110,0.3)', color: '#cdba93', fontFamily: 'Georgia, serif', fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: 4, cursor: 'pointer' }}>

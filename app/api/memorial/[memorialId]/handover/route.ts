@@ -218,7 +218,8 @@ export async function GET(
   }
 
   try {
-    await assertMemorialAccess(memorialId, userId, 'read');
+    // Staff may still SEE the handover's status after it completes.
+    await assertMemorialAccess(memorialId, userId, 'read', { allowAfterHandover: true });
   } catch (err) {
     return handleAuthError(err);
   }

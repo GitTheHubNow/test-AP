@@ -5,6 +5,7 @@ import Link           from 'next/link';
 import { notFound }   from 'next/navigation';
 import { auth }       from '@clerk/nextjs/server';
 import { prisma }     from '@/lib/prisma';
+import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { ensurePublicToken } from '@/lib/qr';
 import { isTributeUnlocked, daysUntilTributeUnlock } from '@/lib/memorial/journeyGate';
 import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
@@ -31,6 +32,22 @@ export default async function MemorialLayout({ children, params }: Props) {
 
   const { userId } = await auth();
   if (!userId) return null;
+
+  // ACCESS CHECK — this layout loads names, funeral date, venue and the family
+  // contact's name/email for ANY memorialId it is given, and wraps every page
+  // below it. Without this, any signed-in user of any funeral home who knew an
+  // ID got that data rendered around a "not found" page (each child page
+  // checks access for itself, but the layout renders regardless).
+  //
+  // allowAfterHandover: this layout also wraps the handover page, which staff
+  // must still reach to resend or revoke the family's access card. Every
+  // CONTENT page below checks access for itself without that option, so
+  // handed-over content stays closed to staff.
+  try {
+    await assertMemorialAccess(memorialId, userId, 'read', { allowAfterHandover: true });
+  } catch {
+    notFound();
+  }
 
   const memorial = await prisma.memorial.findFirst({
     where:  { id: memorialId },

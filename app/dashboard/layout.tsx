@@ -46,8 +46,9 @@ import { BillingReviewBanner } from '@/components/dashboard/BillingReviewBanner'
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth();
 
-  // Middleware already enforces auth for /dashboard(.*), so userId should
-  // always be present here — but guard defensively rather than assume.
+  // NOTE: proxy.ts does NOT enforce auth (the edge protection was removed in
+  // commit 58d27ee). This check — and the per-page / per-route checks — is
+  // the ONLY thing keeping signed-out users out. Do not remove it.
   if (!userId) {
     redirect('/sign-in');
   }

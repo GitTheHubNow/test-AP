@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { assertPlatformAdmin } from '@/lib/auth/platformAdmin';
-import { getOrgForUser } from '@/lib/tenant';
+import { prisma } from '@/lib/prisma';
 import { isValidPeriodKey, periodKeyFor } from '@/lib/billing/period';
 
 const json = (body: Record<string, unknown>, status: number) => NextResponse.json({ success: false, ...body }, { status });
@@ -27,16 +27,33 @@ export async function withPlatformAdmin(
   }
 }
 
+type MemberOrg = NonNullable<Awaited<ReturnType<typeof findMemberOrg>>>;
+
+/**
+ * READ-ONLY org lookup. Deliberately NOT lib/tenant's getOrgForUser, which
+ * silently creates a "My Funeral Home" organisation for any user without one
+ * — a side effect a billing GET must never have (it would let an API call
+ * skip onboarding, and two simultaneous first calls collide on the unique
+ * clerkOrgId and 500).
+ */
+async function findMemberOrg(userId: string) {
+  const m = await prisma.orgMember.findFirst({
+    where: { userId }, include: { organisation: true }, orderBy: { createdAt: 'asc' },
+  });
+  return m ? { ...m.organisation, role: m.role } : null;
+}
+
 /** Run a handler for an authenticated OWNER/ADMIN of a site; passes the site's org. */
 export async function withBillingOrg(
   label: string,
-  handler: (org: Awaited<ReturnType<typeof getOrgForUser>>) => Promise<NextResponse>,
+  handler: (org: MemberOrg) => Promise<NextResponse>,
   opts: { anyMember?: boolean } = {},
 ): Promise<NextResponse> {
   try {
     const { userId } = await auth();
     if (!userId) return json({ error: 'Unauthorised' }, 401);
-    const org = await getOrgForUser(userId);
+    const org = await findMemberOrg(userId);
+    if (!org) return json({ error: 'No organisation found for this account' }, 404);
     if (!opts.anyMember && org.role !== 'OWNER' && org.role !== 'ADMIN') {
       return json({ error: 'Only an account owner or admin can view billing details' }, 403);
     }

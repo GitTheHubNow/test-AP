@@ -30,7 +30,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { MemoryStatus, MemoryCategory, MemorialStatus } from '@prisma/client';
+import { initialPublicStatus } from '@/lib/moderation';
+import { MemoryCategory, MemorialStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode, createAuditEvent } from '@/lib/audit';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -54,7 +55,7 @@ export async function POST(
 
   const memorial = await prisma.memorial.findFirst({
     where:  { slug },
-    select: { id: true, status: true },
+    select: { id: true, status: true, workflowStage: true },
   });
   if (!memorial) {
     return NextResponse.json({ success: false, error: 'Memorial not found' }, { status: 404 });
@@ -88,7 +89,9 @@ export async function POST(
       memorialId:  memorial.id,
       authorName,
       message,
-      status:      MemoryStatus.PENDING,
+      // PENDING by default; publishes immediately only on a handed-over
+      // memorial, where no staff can approve (see lib/moderation.ts).
+      status:      initialPublicStatus(memorial.workflowStage),
       category:    MemoryCategory.GENERAL,
       isGuestBook: false,
     },

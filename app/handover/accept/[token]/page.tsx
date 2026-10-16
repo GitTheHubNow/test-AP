@@ -12,7 +12,7 @@ async function getHandover(token: string) {
   );
   const data = await res.json();
   if (!res.ok) return { error: data.error as string, code: data.code as string };
-  return { data: data.data as { memorial: { id: string; title: string }; familyContactName: string | null; status: string } };
+  return { data: data.data as { memorial: { id: string; title: string }; familyContactName: string | null; status: string; emailHint?: string } };
 }
 
 export default async function HandoverAcceptPage({ params }: Props) {
@@ -45,6 +45,7 @@ export default async function HandoverAcceptPage({ params }: Props) {
             token={token}
             memorial={result.data.memorial}
             familyContactName={result.data.familyContactName}
+            emailHint={result.data.emailHint}
           />
         )}
       </div>

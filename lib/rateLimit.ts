@@ -75,22 +75,37 @@ export async function checkRateLimit(
   const ipHash = hashIp(ip);
   const since = new Date(Date.now() - options.windowMs);
 
-  const recentCount = await prisma.rateLimitHit.count({
-    where: { bucket, ipHash, createdAt: { gte: since } },
+  // RECORD FIRST, THEN RANK. The old order (count, then insert) let a burst
+  // of parallel requests all read "0 recent hits" before any of them had
+  // written one, so every request in the burst was admitted — defeating the
+  // limit exactly where it matters most (e.g. guessing emails on
+  // family-access/verify).
+  //
+  // Now each request inserts its own hit, then counts only the hits that
+  // arrived at or before it (ties broken by id). That gives it a stable
+  // rank: ranks 1..max are admitted, everything after is rejected — exactly
+  // `max` get through however many arrive at once, and a request's rank
+  // doesn't depend on how many later ones are still in flight.
+  const hit = await prisma.rateLimitHit.create({
+    data: { bucket, ipHash }, select: { id: true, createdAt: true },
   });
 
-  if (recentCount >= options.max) {
+  const rank = await prisma.rateLimitHit.count({
+    where: {
+      bucket, ipHash,
+      createdAt: { gte: since, lte: hit.createdAt },
+      NOT: { createdAt: hit.createdAt, id: { gt: hit.id } },
+    },
+  });
+
+  if (rank > options.max) {
+    // Don't let rejected attempts extend the caller's own lockout.
+    await prisma.rateLimitHit.delete({ where: { id: hit.id } }).catch(() => {});
     return NextResponse.json(
       { success: false, error: 'Too many requests. Please try again later.' },
       { status: 429 },
     );
   }
-
-  // Record this hit. Fire-and-forget would risk under-counting under
-  // concurrent requests; awaiting keeps the count accurate at the cost
-  // of one extra write per request, which is the same tradeoff
-  // guest-book already makes.
-  await prisma.rateLimitHit.create({ data: { bucket, ipHash } });
 
   return null;
 }

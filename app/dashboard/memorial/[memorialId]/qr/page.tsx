@@ -31,6 +31,7 @@
 
 import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
+import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { notFound } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import LifecyclePanel from '@/components/qr/LifecyclePanel';
@@ -45,8 +46,18 @@ export default async function QRPage({ params }: { params: Promise<{ memorialId:
   const { userId } = await auth();
   if (!userId) notFound();
 
-  const memorial = await prisma.memorial.findFirst({
-    where: { id: memorialId, ownerId: userId },
+  // Was `where: { id, ownerId: userId }`: only the staff member who CREATED the
+  // memorial could open this page (colleagues got a 404), and after a direct
+  // handover that creator is still ownerId — so it also let them straight past
+  // the handed-over cut-off. assertMemorialAccess applies the real rules.
+  try {
+    await assertMemorialAccess(memorialId, userId, 'edit');
+  } catch {
+    notFound();
+  }
+
+  const memorial = await prisma.memorial.findUnique({
+    where: { id: memorialId },
     select: {
       id: true,
       firstName: true,
