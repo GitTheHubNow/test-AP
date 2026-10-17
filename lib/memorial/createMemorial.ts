@@ -19,6 +19,7 @@ import { checkAccountActive } from '@/lib/entitlement';
 // See lib/billing/usage.ts.
 import { recordUsage } from '@/lib/billing/usage';
 import { generateUniqueSlug } from '@/lib/memorial/slug';
+import { generatePublicToken } from '@/lib/qr';
 import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
 
 export interface CreateMemorialInput {
@@ -113,6 +114,10 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
           qrTokenHash,
           uploadLinkToken,
           uploadLinkEnabled:      true,
+          // Issued at creation so the public link (/v/{slug}?key={publicToken})
+          // exists from the first moment. Previously generated lazily on first
+          // QR-panel open, leaving new memorials with no public URL.
+          publicToken:            generatePublicToken(),
           workflowStage:          'COLLECTING',
         },
       });

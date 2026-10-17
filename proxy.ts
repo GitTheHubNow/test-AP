@@ -66,7 +66,14 @@ export default clerkMiddleware(async (auth, req) => {
       // production via NEXT_PUBLIC_CDN_URL. Without this, Clerk's
       // default img-src ('self' https://img.clerk.com) blocks every one
       // of them.
-      'img-src': cdnOrigin ? [cdnOrigin] : [],
+      //
+      // data: is REQUIRED for QR codes — the QR page (and QRCodeDisplay,
+      // DownloadQRButton) render qrcode's toDataURL() output as
+      // <img src="data:image/png;base64,...">. Clerk's default img-src has no
+      // data:, so the browser refused every QR image ("Refused to load the
+      // image 'data:...' because it violates the Content Security Policy").
+      // blob: covers object-URL previews of files chosen for upload.
+      'img-src': ['data:', 'blob:', ...(cdnOrigin ? [cdnOrigin] : [])],
       // app/globals.css (loaded on every page) and two inline
       // @import-based style blocks (the QR print page, the memorial
       // appearance editor) all pull from Google Fonts. Clerk's default
