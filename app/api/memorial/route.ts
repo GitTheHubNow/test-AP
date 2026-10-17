@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getOrgIdForUser } from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 import { createMemorial } from '@/lib/memorial/createMemorial';
 import { entitlementError } from '@/lib/entitlement';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 /**
  * POST /api/memorial
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
   }
+
+  // Per-user cap on creation attempts: stops a scripted sign-up from spraying
+  // memorials (each one is a public page + a handover record).
+  const limited = await checkRateLimit(request, `memorial-create:${userId}`, {
+    max: 30, windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
 
   let body: {
     firstName:          string;
@@ -57,10 +65,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
   }
 
-  if (!body.firstName?.trim()) {
+  if (!body || typeof body !== 'object' || typeof body.firstName !== 'string' || !body.firstName.trim()) {
     return NextResponse.json({ success: false, error: 'firstName is required' }, { status: 400 });
   }
-  if (!body.lastName?.trim()) {
+  if (typeof body.lastName !== 'string' || !body.lastName.trim()) {
     return NextResponse.json({ success: false, error: 'lastName is required' }, { status: 400 });
   }
 
@@ -72,8 +80,12 @@ export async function POST(request: NextRequest) {
   let result: Awaited<ReturnType<typeof createMemorial>>;
   try {
     const orgId = await getOrgIdForUser(userId);
-    result = await createMemorial({ ...body, ownerId: userId, organisationId: orgId });
+    result = await createMemorial({
+      ...body, ownerId: userId, organisationId: orgId,
+      dedupeWindowMs: 15_000, // double-click / retry guard
+    });
   } catch (err) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[POST /api/memorial] unhandled error:', err);
     return NextResponse.json(
       { success: false, error: 'Could not create the memorial. Please try again.' },
@@ -88,7 +100,13 @@ export async function POST(request: NextRequest) {
     if (result.kind === 'validation') {
       return NextResponse.json({ success: false, error: result.error }, { status: 400 });
     }
-    // plan_limit
+    // plan_limit: suspended account or free-trial cap
+    if (result.code === 'TRIAL_LIMIT_REACHED') {
+      return NextResponse.json(
+        { success: false, error: result.error, code: result.code },
+        { status: 403 },
+      );
+    }
     return entitlementError(result.error);
   }
 

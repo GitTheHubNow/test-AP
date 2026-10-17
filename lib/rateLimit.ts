@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
+import { getIpHashSalt } from '@/lib/ipSalt';
 
 export interface RateLimitOptions {
   /** Max requests allowed within the window. */
@@ -46,7 +47,7 @@ export interface RateLimitOptions {
  */
 function hashIp(ip: string): string {
   return createHash('sha256')
-    .update(ip + (process.env.IP_HASH_SALT ?? 'memoriam-salt'))
+    .update(ip + getIpHashSalt())
     .digest('hex')
     .slice(0, 16);
 }

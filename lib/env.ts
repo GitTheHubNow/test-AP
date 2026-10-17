@@ -117,6 +117,12 @@ const EnvSchema = z.object({
     message: 'NEXT_PUBLIC_APP_URL is set to localhost in production — set it to your real deployed URL (e.g. https://your-domain.vercel.app) in Vercel\'s Production environment variables',
     path: ['NEXT_PUBLIC_APP_URL'],
   },
+).refine(
+  (env) => env.NODE_ENV !== 'production' || (!!env.IP_HASH_SALT && env.IP_HASH_SALT.length >= 16),
+  {
+    message: 'IP_HASH_SALT must be set (16+ random characters) when NODE_ENV=production — it salts the hashed client IPs used for rate limiting. Generate one with: openssl rand -hex 24',
+    path: ['IP_HASH_SALT'],
+  },
 );
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { randomUUID }                 from 'crypto';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 
 const VALID_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
 type Status = typeof VALID_STATUSES[number];
@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, data: { petCases } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-cases/GET]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -236,6 +237,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: { petCase } }, { status: 201 });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-cases/POST]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

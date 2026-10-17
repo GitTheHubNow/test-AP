@@ -3,6 +3,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { getPublicUrl } from '@/lib/upload-shared';
+import { BulkUploadPanel } from '@/components/collection/BulkUploadPanel';
+import { directUploadOne } from '@/lib/direct-upload-client';
+import { resolveMimeType } from '@/lib/bulk-upload';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -52,6 +55,7 @@ interface Props {
   items:    CollectionItem[];
   invites:  CollectionInvite[];
   counts:   { total: number; unsorted: number; ready: number; approved: number; rejected: number };
+  storage:  { usedBytes: number; limitBytes: number };
 }
 
 // ── Status config ──────────────────────────────────────────────────────────
@@ -416,11 +420,29 @@ function UploadForm({ memorialId, onSuccess }: { memorialId: string; onSuccess: 
     if (file)        fd.append('file',        file);
 
     try {
-      const res  = await fetch(`/api/memorial/${memorialId}/collection`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed');
+      let item: CollectionItem;
+      if (file && type !== 'STORY') {
+        // File bytes go straight to the bucket (Vercel rejects request bodies
+        // over ~4.5MB, so the old multipart POST failed for normal photos in
+        // production). Falls back to the multipart route in local dev.
+        const r = await directUploadOne({
+          prepareUrl:  `/api/memorial/${memorialId}/collection/bulk/prepare`,
+          completeUrl: `/api/memorial/${memorialId}/collection/bulk/complete`,
+          file, name: file.name, mime: resolveMimeType(file.name, file.type),
+          completeExtra: { title: title || undefined, description: description || undefined },
+          fallback: () => fetch(`/api/memorial/${memorialId}/collection`, { method: 'POST', body: fd }),
+        });
+        if (!r.ok) throw new Error(r.error);
+        item = r.data?.data?.items?.[0] ?? r.data?.data?.item;
+        if (!item) throw new Error('Upload failed');
+      } else {
+        const res  = await fetch(`/api/memorial/${memorialId}/collection`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Upload failed');
+        item = data.data.item;
+      }
 
-      onSuccess(data.data.item);
+      onSuccess(item);
       setTitle(''); setDescription(''); setFile(null);
       if (fileRef.current) fileRef.current.value = '';
     } catch (e: unknown) {
@@ -588,7 +610,7 @@ function InvitePanel({ memorialId, invites: initialInvites }: { memorialId: stri
 
 // ── Main Workspace ─────────────────────────────────────────────────────────
 
-export function CollectionWorkspace({ memorial, items: initialItems, invites, counts: initialCounts }: Props) {
+export function CollectionWorkspace({ memorial, items: initialItems, invites, counts: initialCounts, storage }: Props) {
   const [items,  setItems]  = useState(initialItems);
   const [filter, setFilter] = useState<string>('ALL');
   const [tab,    setTab]    = useState<'items' | 'invites'>('items');
@@ -626,6 +648,10 @@ export function CollectionWorkspace({ memorial, items: initialItems, invites, co
 
   const handleUploadSuccess = useCallback((item: CollectionItem) => {
     setItems(prev => [item, ...prev]);
+  }, []);
+
+  const handleBulkAdded = useCallback((added: CollectionItem[]) => {
+    setItems(prev => [...added, ...prev]);
   }, []);
 
   const FILTERS = [
@@ -725,6 +751,7 @@ export function CollectionWorkspace({ memorial, items: initialItems, invites, co
 
           {/* Content */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <BulkUploadPanel memorialId={memorial.id} storage={storage} onItemsAdded={handleBulkAdded} />
             <UploadForm memorialId={memorial.id} onSuccess={handleUploadSuccess} />
 
             {filtered.length === 0 ? (

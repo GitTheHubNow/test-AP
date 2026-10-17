@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 
 type Params = { params: Promise<{ petCaseId: string }> };
 
@@ -104,6 +104,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true, data: { petCase } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-cases/[petCaseId]/GET]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -313,6 +314,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true, data: { petCase: updated } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-cases/[petCaseId]/PATCH]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -355,6 +357,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true, data: { deleted: true } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-cases/[petCaseId]/DELETE]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

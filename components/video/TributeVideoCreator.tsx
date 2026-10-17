@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { directUploadOne } from '@/lib/direct-upload-client';
 import Link from 'next/link';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -612,14 +613,22 @@ console.log('[ffmpeg] render complete');
 
       // ── Upload rendered video to server ──────────────────────────────────
       try {
-        const formData = new FormData();
-        formData.append('video', blob, 'tribute.mp4');
-        const uploadRes = await fetch(`/api/memorial/${memorial.id}/video/upload`, {
-          method: 'POST',
-          body:   formData,
+        // Straight to the bucket via a signed link — the rendered video can be
+        // up to 200MB, far over Vercel's ~4.5MB request body limit, so the old
+        // multipart POST could never have saved it in production (and the
+        // failure was swallowed below). Falls back to that route in local dev.
+        const up = await directUploadOne({
+          prepareUrl:  `/api/memorial/${memorial.id}/video/upload/prepare`,
+          completeUrl: `/api/memorial/${memorial.id}/video/upload/complete`,
+          file: blob, name: 'tribute.mp4', mime: 'video/mp4',
+          fallback: () => {
+            const formData = new FormData();
+            formData.append('video', blob, 'tribute.mp4');
+            return fetch(`/api/memorial/${memorial.id}/video/upload`, { method: 'POST', body: formData });
+          },
         });
-        if (!uploadRes.ok) {
-          console.warn('[video upload] server save failed — local download still available');
+        if (!up.ok) {
+          console.warn('[video upload] server save failed — local download still available:', up.error);
         }
       } catch (uploadErr) {
         console.warn('[video upload] server save error:', uploadErr);

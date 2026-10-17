@@ -30,7 +30,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 import { createMemorial }             from '@/lib/memorial/createMemorial';
 
 // ── Column aliases ────────────────────────────────────────────────────────────
@@ -365,6 +365,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[csv-import/POST]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

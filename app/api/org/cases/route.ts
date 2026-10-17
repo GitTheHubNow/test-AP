@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 
 const VALID_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
 type CaseStatus = typeof VALID_STATUSES[number];
@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, data: { cases } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/cases/GET]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -173,6 +174,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: { case: funeralCase } }, { status: 201 });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/cases/POST]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

@@ -32,6 +32,7 @@ import { NextRequest } from 'next/server';
 import { JobExecutor, JobType } from '@/lib/jobs';
 import { logInfo, logError } from '@/lib/errors';
 import { isValidCronSecret } from '@/lib/timingSafe';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -71,6 +72,20 @@ export async function GET(req: NextRequest) {
       results[jobType] = { success: false, error: 'Unexpected error, see server logs' };
       anyFailed = true;
     }
+  }
+
+  // Rate-limit bookkeeping: every public hit writes a RateLimitHit row and
+  // nothing ever removed them, so the table grew forever (and each request's
+  // rank query slowed with it). Longest window in use is 1 hour; keep 24h.
+  try {
+    const purged = await prisma.rateLimitHit.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    });
+    results.RATE_LIMIT_CLEANUP = { success: true, deleted: purged.count };
+  } catch (error) {
+    logError('cron/maintenance/RATE_LIMIT_CLEANUP', error);
+    results.RATE_LIMIT_CLEANUP = { success: false, error: 'Unexpected error, see server logs' };
+    anyFailed = true;
   }
 
   logInfo('cron/maintenance', anyFailed ? 'Completed with failures' : 'Completed successfully', results);

@@ -1,11 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    serverActions: {
-      enabled: true,
-    },
-  },
+  // (experimental.serverActions.enabled removed — Server Actions are always
+  // on in current Next.js and `enabled` is not a recognised option.)
 
   // Image domains for Next.js Image component
   images: {

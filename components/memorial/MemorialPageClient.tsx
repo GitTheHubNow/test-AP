@@ -695,6 +695,15 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
         </p>
         <p style={{ fontSize: '0.65rem', color: '#2a2018', letterSpacing: '0.06em' }}>
           Absolute Posterity
+          {' · '}
+          {/* Takedown route: anyone who sees a memorial that shouldn't exist
+              (wrong person, living person, abuse) can tell us from the page. */}
+          <a
+            href={`mailto:support@memoriam.com?subject=${encodeURIComponent(`Report a memorial: ${memorial.displayName}`)}&body=${encodeURIComponent('Page address: ')}`}
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            Report this memorial
+          </a>
         </p>
       </footer>
 

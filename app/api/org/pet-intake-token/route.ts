@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { randomUUID }                 from 'crypto';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 
 async function guardFeature(orgId: string): Promise<NextResponse | null> {
   const org = await prisma.organisation.findUnique({
@@ -58,6 +58,7 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ success: true, data: { token } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-intake-token/GET]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -87,6 +88,7 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ success: true, data: { token } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-intake-token/POST]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

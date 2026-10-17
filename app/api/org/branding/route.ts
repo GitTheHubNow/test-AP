@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 import { validateBrandingUpdate }     from '@/lib/theme';
 
 // ── GET ───────────────────────────────────────────────────────────────────────
@@ -53,6 +53,7 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ success: true, data: { branding: org } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/branding/GET]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }
@@ -82,6 +83,7 @@ export async function PATCH(req: NextRequest) {
     try {
       updateData = validateBrandingUpdate(body);
     } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
       return NextResponse.json(
         { success: false, error: err.message ?? 'Validation error' },
         { status: err.status ?? 400 },
@@ -113,6 +115,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true, data: { branding: updated } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/branding/PATCH]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

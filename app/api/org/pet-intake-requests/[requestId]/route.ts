@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { randomUUID }                 from 'crypto';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 
 type Params = { params: Promise<{ requestId: string }> };
 
@@ -164,6 +164,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true, data: { petCase, request: updatedRequest } }, { status: 201 });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/pet-intake-requests/[requestId]/PATCH]', err);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
   }

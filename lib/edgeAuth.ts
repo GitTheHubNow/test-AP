@@ -18,8 +18,8 @@
 //     directory and FAILS THE BUILD for any unclassified route, so it can't be
 //     forgotten silently. It also means odd paths ("/%64ashboard", "//dashboard")
 //     that dodge a prefix match are protected rather than waved through.
-//   · Three modes (EDGE_AUTH_MODE): off | log | enforce. Default is `log`,
-//     which blocks nothing and just reports what WOULD be blocked, so this can
+//   · Three modes (EDGE_AUTH_MODE): off | log | enforce. Default is `enforce` in
+//     production and `log` elsewhere; `log` blocks nothing and just reports what WOULD be blocked, so this can
 //     be deployed with zero risk of locking anyone out, then switched to
 //     enforce once the logs are clean.
 
@@ -90,7 +90,10 @@ export function classifyPath(pathname: string): PathClass {
 export function parseEdgeAuthMode(raw: string | undefined | null): EdgeAuthMode {
   const v = (raw ?? '').trim().toLowerCase();
   if (v === 'off' || v === 'enforce' || v === 'log') return v;
-  return 'log';
+  // Unset/unrecognised: fail CLOSED in production, stay permissive in dev/test.
+  // (This used to be 'log' everywhere, i.e. edge protection silently did
+  // nothing on a production deploy that forgot to set the variable.)
+  return process.env.NODE_ENV === 'production' ? 'enforce' : 'log';
 }
 
 export function edgeDecision(pathname: string, mode: EdgeAuthMode, signedIn: boolean): EdgeDecision {

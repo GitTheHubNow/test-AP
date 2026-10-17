@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser, assertFeatureEnabled } from '@/lib/tenant';
+import { getOrgIdForUser, assertFeatureEnabled, orgErrorResponse } from '@/lib/tenant';
 import {
   isValidTransition,
   applyTransition,
@@ -110,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ success: true, data: { request: updated } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     return handleAuthError(err);
   }
 }

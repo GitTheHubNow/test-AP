@@ -23,7 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser }            from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 import { saveUploadedFile }           from '@/lib/storage-server';
 import { getPublicUrl }               from '@/lib/upload-shared';
 import { verifyFileContent }          from '@/lib/file-validation';
@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: { url, blobKey } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     console.error('[org/branding/logo/POST]', err);
     return NextResponse.json({ success: false, error: 'Upload failed' }, { status: 500 });
   }

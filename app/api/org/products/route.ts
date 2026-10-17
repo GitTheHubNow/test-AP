@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
-import { getOrgIdForUser, assertFeatureEnabled } from '@/lib/tenant';
+import { getOrgIdForUser, assertFeatureEnabled, orgErrorResponse } from '@/lib/tenant';
 import { VALID_PRODUCT_TYPES } from '@/lib/products/transitions';
 import { handleAuthError } from '@/lib/errors';
 import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
@@ -114,6 +114,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, data: { requests: formatted } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     return handleAuthError(err);
   }
 }

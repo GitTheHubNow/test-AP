@@ -4,13 +4,16 @@
  * Resolves the Organisation for the current authenticated user.
  * Every API route that needs org context calls getOrgForUser().
  *
- * Solo users (not part of a Clerk Org) get a personal Organisation
- * created automatically on first call — transparent to them.
+ * A user with NO org membership is NOT given an org here any more. Orgs are
+ * created only by POST /api/onboarding/create-org, after the user has accepted
+ * the Terms. Previously this file auto-created a "My Funeral Home" org on first
+ * call, which let a freshly signed-up user skip /onboarding entirely (and the
+ * terms acceptance) by calling any org-scoped API directly.
  */
 
 import { prisma }  from '@/lib/prisma';
 import type { Organisation, OrgRole } from '@prisma/client';
-import { computeTrialEndsAt } from '@/lib/billing/trial';
+import { NextResponse } from 'next/server';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,33 +38,45 @@ export {
 } from '@/lib/auth/getOrgForUser';
 // ─────────────────────────────────────────────────────────────────────────────
 
+export const ONBOARDING_REQUIRED = 'ONBOARDING_REQUIRED';
+
+/**
+ * Thrown when a signed-in user has no organisation yet. Carries status 403 so
+ * generic handlers (handleAuthError) answer correctly; routes that have their
+ * own catch should call orgErrorResponse(err) first.
+ */
+export function onboardingRequiredError(): Error {
+  return Object.assign(
+    new Error('Please finish setting up your organisation before continuing.'),
+    { status: 403, code: ONBOARDING_REQUIRED },
+  );
+}
+
+/** 403 JSON response if `err` is the onboarding-required error, otherwise null. */
+export function orgErrorResponse(err: unknown): NextResponse | null {
+  if (err && typeof err === 'object' && (err as { code?: unknown }).code === ONBOARDING_REQUIRED) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Please finish setting up your organisation before continuing.',
+        code: ONBOARDING_REQUIRED,
+      },
+      { status: 403 },
+    );
+  }
+  return null;
+}
+
 export async function getOrgForUser(userId: string): Promise<OrgWithRole> {
-  // Check existing membership
   const membership = await prisma.orgMember.findFirst({
     where:   { userId },
     include: { organisation: true },
     orderBy: { createdAt: 'asc' },
   });
 
-  if (membership) {
-    return { ...membership.organisation, role: membership.role };
-  }
+  if (!membership) throw onboardingRequiredError();
 
-  // First sign-in: create a personal org and make them OWNER
-  const org = await prisma.organisation.create({
-    data: {
-      clerkOrgId: `personal_${userId}`,
-      name:       'My Funeral Home',
-      slug:       `user-${userId.slice(-8).toLowerCase()}`,
-      plan:       'STARTER',
-      trialEndsAt: await computeTrialEndsAt(),
-      members: {
-        create: { userId, role: 'OWNER' },
-      },
-    },
-  });
-
-  return { ...org, role: 'OWNER' as OrgRole };
+  return { ...membership.organisation, role: membership.role };
 }
 
 /**
@@ -106,7 +121,13 @@ export async function assertMemorialAccess(
   memorialId: string,
   userId:     string
 ): Promise<{ id: string; organisationId: string | null } | null> {
-  const orgId = await getOrgIdForUser(userId);
+  let orgId: string;
+  try {
+    orgId = await getOrgIdForUser(userId);
+  } catch (err) {
+    if (orgErrorResponse(err)) return null; // no org yet → no access
+    throw err;
+  }
 
   const memorial = await prisma.memorial.findUnique({
     where: { id: memorialId },

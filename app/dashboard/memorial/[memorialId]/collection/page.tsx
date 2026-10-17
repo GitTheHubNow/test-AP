@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { CollectionWorkspace } from '@/components/collection/CollectionWorkspace';
 import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
 import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
+import { getMemorialStorageUsage } from '@/lib/storage-quota';
 
 interface Props {
   params: Promise<{ memorialId: string }>;
@@ -95,6 +96,8 @@ export default async function CollectionPage({ params }: Props) {
     rejected: memorial.collectionItems.filter(i => i.status === 'REJECTED').length,
   };
 
+  const storageUsage = await getMemorialStorageUsage(memorialId);
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
   return (
@@ -120,6 +123,7 @@ export default async function CollectionPage({ params }: Props) {
         createdAt: inv.createdAt.toISOString(),
       }))}
       counts={counts}
+      storage={{ usedBytes: storageUsage.usedBytes, limitBytes: storageUsage.limitBytes }}
     />
   );
 }

@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { CommonErrors, successResponse, logError, handlePrismaError } from '@/lib/errors';
 // ── ADDED: SaaS launch imports ───────────────────────────────────────────────
-import { getOrgIdForUser } from '@/lib/tenant';
+import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
     return successResponse({ memorials: withAlerts });
 
   } catch (error) {
+    { const _orgErr = orgErrorResponse(error); if (_orgErr) return _orgErr; }
     if (error && typeof error === 'object' && 'code' in error) {
       return handlePrismaError(error);
     }

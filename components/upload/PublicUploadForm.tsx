@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { putWithRetry } from '@/lib/direct-upload-client';
 
 interface Props {
   token:      string;
@@ -68,28 +69,75 @@ export function PublicUploadForm({ token, memorialId }: Props) {
 
     let uploaded = 0;
     const errors: string[] = [];
+    const total = files.length;
+    const tick = () => setProgress(Math.round(((uploaded + errors.length) / total) * 100));
 
-    for (const { file } of files) {
-      const fd = new FormData();
-      fd.append('file',         file);
-      fd.append('uploaderName', uploaderName.trim());
-      if (uploaderEmail.trim()) fd.append('uploaderEmail', uploaderEmail.trim());
+    try {
+      // Photos go straight to the bucket via short-lived signed links — Vercel
+      // rejects request bodies over ~4.5MB, which is most modern phone photos.
+      const prep = await fetch(`/api/upload/${token}/prepare`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: files.map(({ file }) => ({ name: file.name, type: file.type, size: file.size })) }),
+      });
+      const pj = await prep.json().catch(() => ({}));
+      if (!prep.ok) throw new Error(pj.error ?? 'Could not start the upload');
 
-      try {
-        const res = await fetch(`/api/upload/${token}`, { method: 'POST', body: fd });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          errors.push(d.error ?? `Failed to upload "${file.name}"`);
-        } else {
-          uploaded++;
+      const { mode, accepted, rejected } = pj.data as {
+        mode: 'direct' | 'server';
+        accepted: Array<{ index: number; name: string; key?: string; uploadUrl?: string; mimeType: string; size: number }>;
+        rejected: Array<{ name: string; reason: string }>;
+      };
+      for (const r of rejected) errors.push(`"${r.name}": ${r.reason}`);
+      tick();
+
+      if (mode === 'server') {
+        // Local dev (no bucket): original one-request-per-photo route.
+        for (const a of accepted) {
+          const fd = new FormData();
+          fd.append('file', files[a.index].file);
+          fd.append('uploaderName', uploaderName.trim());
+          if (uploaderEmail.trim()) fd.append('uploaderEmail', uploaderEmail.trim());
+          try {
+            const res = await fetch(`/api/upload/${token}`, { method: 'POST', body: fd });
+            if (res.ok) uploaded++;
+            else errors.push((await res.json().catch(() => ({}))).error ?? `Failed to upload "${a.name}"`);
+          } catch { errors.push(`Network error uploading "${a.name}"`); }
+          tick();
         }
-      } catch {
-        errors.push(`Network error uploading "${file.name}"`);
-      }
+      } else {
+        const landed: Array<{ key: string; name: string; size: number; mimeType: string }> = [];
+        const queue = [...accepted];
+        let sent = 0;
+        const worker = async () => {
+          for (let a = queue.shift(); a; a = queue.shift()) {
+            try {
+              await putWithRetry(a.uploadUrl!, files[a.index].file, a.mimeType);
+              landed.push({ key: a.key!, name: a.name, size: a.size, mimeType: a.mimeType });
+            } catch {
+              errors.push(`Could not upload "${a.name}"`);
+            }
+            sent++;
+            setProgress(Math.round(((sent + rejected.length) / total) * 90)); // last 10% = saving
+          }
+        };
+        await Promise.all(Array.from({ length: 3 }, worker));
 
-      setProgress(Math.round(((uploaded + errors.length) / files.length) * 100));
+        if (landed.length > 0) {
+          const done = await fetch(`/api/upload/${token}/complete`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: landed, uploaderName: uploaderName.trim(), uploaderEmail: uploaderEmail.trim() }),
+          });
+          const dj = await done.json().catch(() => ({}));
+          if (!done.ok) throw new Error(dj.error ?? 'Could not save your photos');
+          uploaded = dj.data?.uploaded ?? 0;
+          for (const f of (dj.data?.failed ?? []) as Array<{ name: string; reason: string }>) errors.push(`"${f.name}": ${f.reason}`);
+        }
+      }
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : 'Upload failed');
     }
 
+    setProgress(100);
     setUploading(false);
     setSuccessCount(uploaded);
 

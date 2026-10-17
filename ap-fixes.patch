@@ -1,0 +1,3571 @@
+diff --git a/__tests__/bulkUpload.test.ts b/__tests__/bulkUpload.test.ts
+new file mode 100644
+index 0000000..6d8631f
+--- /dev/null
++++ b/__tests__/bulkUpload.test.ts
+@@ -0,0 +1,86 @@
++import { describe, it, expect } from 'vitest';
++import {
++  planBulkBatch, resolveMimeType, isBulkKeyForMemorial, titleFromFileName, BULK_LIMITS, formatBytes,
++} from '@/lib/bulk-upload';
++
++const MB = 1024 * 1024;
++const GB = 1024 * MB;
++const f = (name: string, size: number, type = '') => ({ name, type, size });
++
++describe('resolveMimeType', () => {
++  it('keeps an accepted declared type', () => expect(resolveMimeType('a.jpg', 'image/jpeg')).toBe('image/jpeg'));
++  it('guesses HEIC from the extension when the browser sends nothing', () => {
++    expect(resolveMimeType('IMG_1.HEIC', '')).toBe('image/heic');
++    expect(resolveMimeType('clip.MOV', 'application/octet-stream')).toBe('video/quicktime');
++  });
++  it('returns empty for unknown', () => expect(resolveMimeType('x.exe', 'application/x-msdownload')).toBe(''));
++});
++
++describe('planBulkBatch', () => {
++  it('accepts supported files and classifies them', () => {
++    const p = planBulkBatch([f('a.jpg', MB), f('b.mp4', 10 * MB), f('c.pdf', MB)], 5 * GB);
++    expect(p.rejected).toEqual([]);
++    expect(p.accepted.map((a) => a.type)).toEqual(['PHOTO', 'VIDEO', 'DOCUMENT']);
++    expect(p.acceptedBytes).toBe(12 * MB);
++  });
++  it('rejects unsupported, empty, and oversize files with reasons', () => {
++    const p = planBulkBatch([f('x.exe', MB), f('e.jpg', 0), f('big.jpg', 51 * MB), f('ok.mp4', 200 * MB)], 5 * GB);
++    expect(p.rejected.map((r) => r.reason)).toEqual([
++      'Unsupported file type', 'File is empty', expect.stringMatching(/Too large/),
++    ]);
++    expect(p.accepted).toHaveLength(1);
++  });
++  it('never goes over the remaining storage — takes files in order until full', () => {
++    const files = Array.from({ length: 10 }, (_, i) => f(`p${i}.jpg`, 10 * MB));
++    const p = planBulkBatch(files, 35 * MB); // room for exactly 3
++    expect(p.accepted.map((a) => a.name)).toEqual(['p0.jpg', 'p1.jpg', 'p2.jpg']);
++    expect(p.rejected).toHaveLength(7);
++    expect(p.rejected[0].reason).toMatch(/storage limit/);
++    expect(p.acceptedBytes).toBeLessThanOrEqual(35 * MB);
++  });
++  it('a small file after a too-big one can still fit', () => {
++    const p = planBulkBatch([f('big.mp4', 150 * MB), f('small.jpg', MB)], 100 * MB);
++    expect(p.accepted.map((a) => a.name)).toEqual(['small.jpg']);
++  });
++  it('handles exactly-full and zero remaining', () => {
++    expect(planBulkBatch([f('a.jpg', 10 * MB)], 10 * MB).accepted).toHaveLength(1);
++    expect(planBulkBatch([f('a.jpg', 1)], 0).accepted).toHaveLength(0);
++  });
++  it('tolerates garbage input without throwing', () => {
++    const p = planBulkBatch([{ name: 5, type: null, size: 'x' } as any, null as any], 1 * GB);
++    expect(p.accepted).toHaveLength(0);
++    expect(p.rejected).toHaveLength(2);
++  });
++  it('respects the 5GB memorial cap end to end', () => {
++    // 5GB cap with 4.9GB already used → only ~100MB can still be added
++    const used = 4.9 * GB, limit = 5 * GB;
++    const p = planBulkBatch(Array.from({ length: 5 }, (_, i) => f(`v${i}.mp4`, 40 * MB)), limit - used);
++    expect(p.acceptedBytes).toBeLessThanOrEqual(limit - used);
++    expect(p.accepted.length).toBe(2);
++  });
++});
++
++describe('isBulkKeyForMemorial', () => {
++  const id = 'cmvc67fac0002w3mfkb5nttqm';
++  const uuid = '123e4567-e89b-12d3-a456-426614174000';
++  it('accepts keys the prepare step issues', () => {
++    expect(isBulkKeyForMemorial(`collection/${id}/${uuid}.jpg`, id)).toBe(true);
++  });
++  it('rejects other memorials, traversal and odd shapes', () => {
++    expect(isBulkKeyForMemorial(`collection/OTHER/${uuid}.jpg`, id)).toBe(false);
++    expect(isBulkKeyForMemorial(`collection/${id}/../x/${uuid}.jpg`, id)).toBe(false);
++    expect(isBulkKeyForMemorial(`collection/${id}/${uuid}.jpg/extra`, id)).toBe(false);
++    expect(isBulkKeyForMemorial(`memorials/${id}/uploads/${uuid}.jpg`, id)).toBe(false);
++    expect(isBulkKeyForMemorial(42, id)).toBe(false);
++    expect(isBulkKeyForMemorial(`collection/a.b/${uuid}.jpg`, 'a.b')).toBe(false);
++  });
++});
++
++describe('helpers', () => {
++  it('titles', () => { expect(titleFromFileName('IMG_4821.JPG')).toBe('IMG_4821'); expect(titleFromFileName('.jpg').length).toBeGreaterThan(0); });
++  it('formatBytes', () => { expect(formatBytes(5 * GB)).toBe('5.00 GB'); expect(formatBytes(1536 * 1024)).toBe('1.5 MB'); });
++  it('limits match the single-file routes', () => {
++    expect(BULK_LIMITS.maxBytes.PHOTO).toBe(50 * MB);
++    expect(BULK_LIMITS.maxBytes.VIDEO).toBe(200 * MB);
++  });
++});
+diff --git a/__tests__/ipSalt.test.ts b/__tests__/ipSalt.test.ts
+new file mode 100644
+index 0000000..6f53876
+--- /dev/null
++++ b/__tests__/ipSalt.test.ts
+@@ -0,0 +1,21 @@
++import { describe, it, expect, afterEach } from 'vitest';
++import { getIpHashSalt } from '@/lib/ipSalt';
++
++const env = process.env as Record<string, string | undefined>;
++const saved = { salt: env.IP_HASH_SALT, node: env.NODE_ENV };
++afterEach(() => { env.IP_HASH_SALT = saved.salt; env.NODE_ENV = saved.node; });
++
++describe('getIpHashSalt', () => {
++  it('uses the configured salt', () => {
++    env.IP_HASH_SALT = 'abc123';
++    expect(getIpHashSalt()).toBe('abc123');
++  });
++  it('has no source-visible fallback in production', () => {
++    delete env.IP_HASH_SALT; env.NODE_ENV = 'production';
++    expect(() => getIpHashSalt()).toThrow(/IP_HASH_SALT/);
++  });
++  it('falls back only outside production', () => {
++    delete env.IP_HASH_SALT; env.NODE_ENV = 'development';
++    expect(getIpHashSalt()).toBeTruthy();
++  });
++});
+diff --git a/__tests__/validateInput.test.ts b/__tests__/validateInput.test.ts
+new file mode 100644
+index 0000000..c0162aa
+--- /dev/null
++++ b/__tests__/validateInput.test.ts
+@@ -0,0 +1,42 @@
++import { describe, it, expect } from 'vitest';
++import { validateMemorialInput, isValidEmail } from '@/lib/memorial/validateInput';
++
++const ok = { firstName: 'Jane', lastName: 'Doe' };
++const NOW = new Date('2026-10-17T00:00:00Z');
++
++describe('validateMemorialInput', () => {
++  it('accepts the minimum input', () => {
++    expect(validateMemorialInput(ok, NOW)).toBeNull();
++  });
++  it('requires string names', () => {
++    expect(validateMemorialInput({ firstName: 5, lastName: 'x' }, NOW)).toMatch(/firstName/);
++    expect(validateMemorialInput({ firstName: 'a', lastName: '  ' }, NOW)).toMatch(/lastName/);
++  });
++  it('limits lengths', () => {
++    expect(validateMemorialInput({ ...ok, firstName: 'a'.repeat(101) }, NOW)).toMatch(/100/);
++    expect(validateMemorialInput({ ...ok, venueAddress: 'a'.repeat(301) }, NOW)).toMatch(/300/);
++  });
++  it('rejects bad emails (family contact becomes a handover recipient)', () => {
++    expect(validateMemorialInput({ ...ok, familyContactEmail: 'nope' }, NOW)).toMatch(/valid email/);
++    expect(validateMemorialInput({ ...ok, familyContactEmail: 'a@b.co' }, NOW)).toBeNull();
++    expect(isValidEmail('a b@c.com')).toBe(false);
++  });
++  it('rejects unparseable and out-of-range dates instead of 500ing later', () => {
++    expect(validateMemorialInput({ ...ok, dateOfDeath: 'garbage' }, NOW)).toMatch(/valid date/);
++    expect(validateMemorialInput({ ...ok, dateOfDeath: '2030-01-01' }, NOW)).toMatch(/future/);
++    expect(validateMemorialInput({ ...ok, dateOfBirth: '1700-01-01' }, NOW)).toMatch(/range/);
++    expect(validateMemorialInput({ ...ok, dateOfBirth: '2000-01-01', dateOfDeath: '1990-01-01' }, NOW)).toMatch(/before/);
++    expect(validateMemorialInput({ ...ok, funeralDate: '2040-01-01' }, NOW)).toMatch(/range/);
++  });
++  it('accepts a normal funeral booking', () => {
++    expect(validateMemorialInput({
++      ...ok, dateOfBirth: '1960-08-20', dateOfDeath: '2025-08-29',
++      funeralDate: '2026-10-20', serviceTime: '2026-10-20T01:30:00Z', sendAfterDays: 7,
++    }, NOW)).toBeNull();
++  });
++  it('validates sendAfterDays and flags', () => {
++    expect(validateMemorialInput({ ...ok, sendAfterDays: -1 }, NOW)).toMatch(/sendAfterDays/);
++    expect(validateMemorialInput({ ...ok, sendAfterDays: 1.5 }, NOW)).toMatch(/sendAfterDays/);
++    expect(validateMemorialInput({ ...ok, isMaori: 'yes' }, NOW)).toMatch(/isMaori/);
++  });
++});
+diff --git a/app/api/cron/maintenance/route.ts b/app/api/cron/maintenance/route.ts
+index a400ca6..52765ca 100644
+--- a/app/api/cron/maintenance/route.ts
++++ b/app/api/cron/maintenance/route.ts
+@@ -32,6 +32,7 @@ import { NextRequest } from 'next/server';
+ import { JobExecutor, JobType } from '@/lib/jobs';
+ import { logInfo, logError } from '@/lib/errors';
+ import { isValidCronSecret } from '@/lib/timingSafe';
++import { prisma } from '@/lib/prisma';
+ 
+ export async function GET(req: NextRequest) {
+   const authHeader = req.headers.get('authorization');
+@@ -73,6 +74,20 @@ export async function GET(req: NextRequest) {
+     }
+   }
+ 
++  // Rate-limit bookkeeping: every public hit writes a RateLimitHit row and
++  // nothing ever removed them, so the table grew forever (and each request's
++  // rank query slowed with it). Longest window in use is 1 hour; keep 24h.
++  try {
++    const purged = await prisma.rateLimitHit.deleteMany({
++      where: { createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
++    });
++    results.RATE_LIMIT_CLEANUP = { success: true, deleted: purged.count };
++  } catch (error) {
++    logError('cron/maintenance/RATE_LIMIT_CLEANUP', error);
++    results.RATE_LIMIT_CLEANUP = { success: false, error: 'Unexpected error, see server logs' };
++    anyFailed = true;
++  }
++
+   logInfo('cron/maintenance', anyFailed ? 'Completed with failures' : 'Completed successfully', results);
+ 
+   return Response.json({ success: !anyFailed, results });
+diff --git a/app/api/dashboard/memorials/route.ts b/app/api/dashboard/memorials/route.ts
+index 45832ba..2f2be72 100644
+--- a/app/api/dashboard/memorials/route.ts
++++ b/app/api/dashboard/memorials/route.ts
+@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
+ import { prisma } from '@/lib/prisma';
+ import { CommonErrors, successResponse, logError, handlePrismaError } from '@/lib/errors';
+ // ── ADDED: SaaS launch imports ───────────────────────────────────────────────
+-import { getOrgIdForUser } from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
+ // ────────────────────────────────────────────────────────────────────────────
+ 
+@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
+     return successResponse({ memorials: withAlerts });
+ 
+   } catch (error) {
++    { const _orgErr = orgErrorResponse(error); if (_orgErr) return _orgErr; }
+     if (error && typeof error === 'object' && 'code' in error) {
+       return handlePrismaError(error);
+     }
+diff --git a/app/api/memorial/[memorialId]/collection/bulk/complete/route.ts b/app/api/memorial/[memorialId]/collection/bulk/complete/route.ts
+new file mode 100644
+index 0000000..68bb9f8
+--- /dev/null
++++ b/app/api/memorial/[memorialId]/collection/bulk/complete/route.ts
+@@ -0,0 +1,181 @@
++import { NextRequest, NextResponse } from 'next/server';
++import { auth } from '@clerk/nextjs/server';
++import { CollectionItemStatus } from '@prisma/client';
++import { prisma } from '@/lib/prisma';
++import { AuditAction, ActorRole, EntityType, ReasonCode } from '@/lib/audit';
++import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
++import { handleAuthError } from '@/lib/errors';
++import { checkRateLimit } from '@/lib/rateLimit';
++import { verifyFileContent } from '@/lib/file-validation';
++import { getMemorialStorageUsage } from '@/lib/storage-quota';
++import {
++  BULK_LIMITS, isBulkKeyForMemorial, resolveMimeType, titleFromFileName, typeForMime,
++} from '@/lib/bulk-upload';
++
++/**
++ * POST /api/memorial/[memorialId]/collection/bulk/complete
++ *
++ * Step 2 of a staff bulk upload. The browser has PUT files straight into the
++ * bucket; this route does NOT trust that. For every key it claims, it:
++ *   1. requires the key to be one this memorial's prepare step could have
++ *      issued (collection/<memorialId>/<uuid>.<ext>) — no claiming other
++ *      memorials' files or arbitrary objects;
++ *   2. HEADs the object — must exist; its REAL size is used, not the client's;
++ *   3. enforces the per-file size limit on the real size;
++ *   4. reads the first 4KB and checks the magic bytes against the type
++ *      (same stored-XSS defence as every other upload route);
++ *   5. enforces the memorial's remaining storage on real sizes, in order.
++ * Anything failing is deleted from the bucket and reported; the rest are
++ * recorded as UNSORTED CollectionItems with one audit event each.
++ * Safe to retry: keys already recorded are skipped.
++ */
++export async function POST(
++  request: NextRequest,
++  { params }: { params: Promise<{ memorialId: string }> },
++) {
++  const { memorialId } = await params;
++
++  const { userId } = await auth();
++  if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
++
++  try {
++    await assertMemorialAccess(memorialId, userId, 'edit');
++  } catch (err) {
++    return handleAuthError(err);
++  }
++
++  const limited = await checkRateLimit(request, `bulk-complete:${userId}`, { max: 120, windowMs: 60 * 60 * 1000 });
++  if (limited) return limited;
++
++  if (process.env.NODE_ENV !== 'production') {
++    return NextResponse.json(
++      { success: false, error: 'Direct bulk upload is only used in production (use the single-file route in dev)' },
++      { status: 400 },
++    );
++  }
++
++  let body: { items?: unknown };
++  try { body = await request.json(); } catch {
++    return NextResponse.json({ success: false, error: 'Invalid request' }, { status: 400 });
++  }
++  const raw = body?.items;
++  if (!Array.isArray(raw) || raw.length === 0 || raw.length > BULK_LIMITS.maxFilesPerBatch) {
++    return NextResponse.json({ success: false, error: 'Invalid items' }, { status: 400 });
++  }
++
++  const { s3Head, s3GetRange } = await import('@/lib/storage-s3');
++  const { deleteFile } = await import('@/lib/storage-server');
++
++  type Claim = { key: string; name: string; mimeType: string };
++  const failed: Array<{ key: string; name: string; reason: string }> = [];
++  const claims: Claim[] = [];
++  const seen = new Set<string>();
++
++  for (const r of raw as any[]) {
++    const key  = r?.key;
++    const name = typeof r?.name === 'string' ? r.name.slice(0, BULK_LIMITS.maxFileNameLength) : 'file';
++    if (!isBulkKeyForMemorial(key, memorialId) || seen.has(key)) {
++      failed.push({ key: String(key ?? ''), name, reason: 'Invalid upload reference' });
++      continue; // never touch (or delete) a key we did not issue
++    }
++    seen.add(key);
++    claims.push({ key, name, mimeType: resolveMimeType(name, typeof r?.mimeType === 'string' ? r.mimeType : '') });
++  }
++
++  // Idempotent retries: skip keys that are already recorded.
++  const existing = await prisma.collectionItem.findMany({
++    where:  { blobKey: { in: claims.map((c) => c.key) } },
++    select: { blobKey: true },
++  });
++  const already = new Set(existing.map((e) => e.blobKey));
++  const todo = claims.filter((c) => !already.has(c.key));
++
++  // Verify each object (bounded concurrency).
++  type Verified = Claim & { size: number; type: NonNullable<ReturnType<typeof typeForMime>> };
++  const verified: Verified[] = [];
++  const queue = [...todo];
++  async function worker() {
++    for (let c = queue.shift(); c; c = queue.shift()) {
++      try {
++        const type = typeForMime(c.mimeType);
++        if (!type) { failed.push({ key: c.key, name: c.name, reason: 'Unsupported file type' }); await deleteFile(c.key); continue; }
++
++        const head = await s3Head(c.key);
++        if (!head)            { failed.push({ key: c.key, name: c.name, reason: 'Upload did not finish' }); continue; }
++        if (head.size <= 0)   { failed.push({ key: c.key, name: c.name, reason: 'File is empty' }); await deleteFile(c.key); continue; }
++        if (head.size > BULK_LIMITS.maxBytes[type]) {
++          failed.push({ key: c.key, name: c.name, reason: 'File too large' }); await deleteFile(c.key); continue;
++        }
++
++        const check = verifyFileContent(await s3GetRange(c.key, 4096), c.mimeType);
++        if (!check.valid) { failed.push({ key: c.key, name: c.name, reason: check.reason }); await deleteFile(c.key); continue; }
++
++        verified.push({ ...c, size: head.size, type });
++      } catch (err) {
++        console.error('[bulk/complete] verify failed', c.key, err);
++        failed.push({ key: c.key, name: c.name, reason: 'Could not verify upload' });
++      }
++    }
++  }
++  await Promise.all(Array.from({ length: 6 }, worker));
++
++  // Storage cap on REAL sizes, in the order the client sent them.
++  const order = new Map(claims.map((c, i) => [c.key, i]));
++  verified.sort((a, b) => (order.get(a.key)! - order.get(b.key)!));
++  const usage = await getMemorialStorageUsage(memorialId);
++  let used = usage.usedBytes;
++  const toSave: Verified[] = [];
++  for (const v of verified) {
++    if (used + v.size > usage.limitBytes) {
++      failed.push({ key: v.key, name: v.name, reason: "Would exceed this memorial's storage limit" });
++      await deleteFile(v.key);
++      continue;
++    }
++    used += v.size;
++    toSave.push(v);
++  }
++
++  let items: Array<Record<string, unknown>> = [];
++  if (toSave.length > 0) {
++    try {
++      items = await prisma.$transaction(async (tx) => {
++        const created = [];
++        for (const v of toSave) {
++          created.push(await tx.collectionItem.create({
++            data: {
++              memorialId, uploadedBy: userId, uploaderRole: 'STAFF',
++              type: v.type, status: CollectionItemStatus.UNSORTED,
++              title: titleFromFileName(v.name),
++              blobKey: v.key, mimeType: v.mimeType, sizeBytes: v.size,
++            },
++          }));
++        }
++        await tx.auditEvent.createMany({
++          data: created.map((c) => ({
++            entityType: EntityType.COLLECTION_ITEM, entityId: c.id,
++            action: AuditAction.CREATE, actorId: userId, actorRole: ActorRole.OWNER,
++            reasonCode: ReasonCode.CREATION,
++            metadata: { memorialId, type: c.type, hasFile: true, sizeBytes: c.sizeBytes, bulk: true },
++          })),
++        });
++        return created.map((c) => ({
++          id: c.id, type: c.type, status: c.status, uploaderRole: c.uploaderRole,
++          title: c.title, description: c.description, category: c.category,
++          blobKey: c.blobKey, mimeType: c.mimeType, sizeBytes: c.sizeBytes,
++          showPublicly: c.showPublicly, featured: c.featured, rejectionReason: c.rejectionReason,
++          createdAt: c.createdAt.toISOString(), invite: null,
++        }));
++      }, { timeout: 30_000, maxWait: 10_000 });
++    } catch (error) {
++      console.error('[POST bulk/complete] save failed', error);
++      // Nothing was recorded, so these objects would be orphans — remove them.
++      await Promise.all(toSave.map((v) => deleteFile(v.key).catch(() => {})));
++      return NextResponse.json({ success: false, error: 'Failed to save uploaded files' }, { status: 500 });
++    }
++  }
++
++  return NextResponse.json({
++    success: true,
++    data: { items, failed, alreadyRecorded: already.size },
++  });
++}
+diff --git a/app/api/memorial/[memorialId]/collection/bulk/prepare/route.ts b/app/api/memorial/[memorialId]/collection/bulk/prepare/route.ts
+new file mode 100644
+index 0000000..0a54444
+--- /dev/null
++++ b/app/api/memorial/[memorialId]/collection/bulk/prepare/route.ts
+@@ -0,0 +1,94 @@
++import { NextRequest, NextResponse } from 'next/server';
++import { randomUUID } from 'crypto';
++import { auth } from '@clerk/nextjs/server';
++import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
++import { handleAuthError } from '@/lib/errors';
++import { checkRateLimit } from '@/lib/rateLimit';
++import { getMemorialStorageUsage } from '@/lib/storage-quota';
++import { BULK_LIMITS, extensionOf, planBulkBatch, type BulkFileInput } from '@/lib/bulk-upload';
++
++/**
++ * POST /api/memorial/[memorialId]/collection/bulk/prepare
++ *
++ * Step 1 of a staff bulk upload. The client sends file METADATA only
++ * ({ name, type, size }[]); the server decides which files may be uploaded
++ * (type, per-file size, and the memorial's remaining storage — the same
++ * 5GB cap every other upload route enforces) and, in production, returns a
++ * short-lived presigned PUT URL per accepted file so the browser can send the
++ * bytes straight to R2 (Vercel Functions cannot accept large request bodies).
++ *
++ * Nothing is recorded here. Step 2 (…/bulk/complete) verifies what actually
++ * landed in the bucket and creates the CollectionItem rows.
++ *
++ * Response: { mode: 'direct' | 'server', accepted: [...], rejected: [...],
++ *             storage: { usedBytes, limitBytes, remainingBytes } }
++ *   mode 'server' (local dev, no bucket) → client falls back to the
++ *   single-file route.
++ */
++export async function POST(
++  request: NextRequest,
++  { params }: { params: Promise<{ memorialId: string }> },
++) {
++  const { memorialId } = await params;
++
++  const { userId } = await auth();
++  if (!userId) return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
++
++  try {
++    await assertMemorialAccess(memorialId, userId, 'edit');
++  } catch (err) {
++    return handleAuthError(err);
++  }
++
++  const limited = await checkRateLimit(request, `bulk-prepare:${userId}`, { max: 30, windowMs: 60 * 60 * 1000 });
++  if (limited) return limited;
++
++  let body: { files?: unknown };
++  try { body = await request.json(); } catch {
++    return NextResponse.json({ success: false, error: 'Invalid request' }, { status: 400 });
++  }
++
++  const files = body?.files;
++  if (!Array.isArray(files) || files.length === 0) {
++    return NextResponse.json({ success: false, error: 'No files provided' }, { status: 400 });
++  }
++  if (files.length > BULK_LIMITS.maxFilesPerBatch) {
++    return NextResponse.json(
++      { success: false, error: `Up to ${BULK_LIMITS.maxFilesPerBatch} files per upload run` },
++      { status: 400 },
++    );
++  }
++
++  const inputs: BulkFileInput[] = files.map((f: any) => ({
++    name: typeof f?.name === 'string' ? f.name : '',
++    type: typeof f?.type === 'string' ? f.type : '',
++    size: typeof f?.size === 'number' ? f.size : NaN,
++  }));
++
++  const usage = await getMemorialStorageUsage(memorialId);
++  const plan  = planBulkBatch(inputs, usage.remainingBytes);
++
++  const direct = process.env.NODE_ENV === 'production';
++  let accepted: Array<Record<string, unknown>>;
++
++  if (direct) {
++    const { s3PresignedPut } = await import('@/lib/storage-s3');
++    accepted = await Promise.all(plan.accepted.map(async (a) => {
++      const ext = extensionOf(a.name);
++      const key = `collection/${memorialId}/${randomUUID()}${ext ? `.${ext}` : ''}`;
++      return { ...a, key, uploadUrl: await s3PresignedPut(key, a.mimeType) };
++    }));
++  } else {
++    accepted = plan.accepted.map((a) => ({ ...a }));
++  }
++
++  return NextResponse.json({
++    success: true,
++    data: {
++      mode: direct ? 'direct' : 'server',
++      accepted,
++      rejected: plan.rejected,
++      storage: usage,
++    },
++  });
++}
+diff --git a/app/api/memorial/route.ts b/app/api/memorial/route.ts
+index 5c0a785..e0d0fe6 100644
+--- a/app/api/memorial/route.ts
++++ b/app/api/memorial/route.ts
+@@ -1,8 +1,9 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth } from '@clerk/nextjs/server';
+-import { getOrgIdForUser } from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ import { createMemorial } from '@/lib/memorial/createMemorial';
+ import { entitlementError } from '@/lib/entitlement';
++import { checkRateLimit } from '@/lib/rateLimit';
+ 
+ /**
+  * POST /api/memorial
+@@ -28,6 +29,13 @@ export async function POST(request: NextRequest) {
+     return NextResponse.json({ success: false, error: 'Unauthorised' }, { status: 401 });
+   }
+ 
++  // Per-user cap on creation attempts: stops a scripted sign-up from spraying
++  // memorials (each one is a public page + a handover record).
++  const limited = await checkRateLimit(request, `memorial-create:${userId}`, {
++    max: 30, windowMs: 60 * 60 * 1000,
++  });
++  if (limited) return limited;
++
+   let body: {
+     firstName:          string;
+     lastName:           string;
+@@ -57,10 +65,10 @@ export async function POST(request: NextRequest) {
+     return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
+   }
+ 
+-  if (!body.firstName?.trim()) {
++  if (!body || typeof body !== 'object' || typeof body.firstName !== 'string' || !body.firstName.trim()) {
+     return NextResponse.json({ success: false, error: 'firstName is required' }, { status: 400 });
+   }
+-  if (!body.lastName?.trim()) {
++  if (typeof body.lastName !== 'string' || !body.lastName.trim()) {
+     return NextResponse.json({ success: false, error: 'lastName is required' }, { status: 400 });
+   }
+ 
+@@ -72,8 +80,12 @@ export async function POST(request: NextRequest) {
+   let result: Awaited<ReturnType<typeof createMemorial>>;
+   try {
+     const orgId = await getOrgIdForUser(userId);
+-    result = await createMemorial({ ...body, ownerId: userId, organisationId: orgId });
++    result = await createMemorial({
++      ...body, ownerId: userId, organisationId: orgId,
++      dedupeWindowMs: 15_000, // double-click / retry guard
++    });
+   } catch (err) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[POST /api/memorial] unhandled error:', err);
+     return NextResponse.json(
+       { success: false, error: 'Could not create the memorial. Please try again.' },
+@@ -88,7 +100,13 @@ export async function POST(request: NextRequest) {
+     if (result.kind === 'validation') {
+       return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+     }
+-    // plan_limit
++    // plan_limit: suspended account or free-trial cap
++    if (result.code === 'TRIAL_LIMIT_REACHED') {
++      return NextResponse.json(
++        { success: false, error: result.error, code: result.code },
++        { status: 403 },
++      );
++    }
+     return entitlementError(result.error);
+   }
+ 
+diff --git a/app/api/memorials/[id]/products/route.ts b/app/api/memorials/[id]/products/route.ts
+index 98eccd7..ecc3281 100644
+--- a/app/api/memorials/[id]/products/route.ts
++++ b/app/api/memorials/[id]/products/route.ts
+@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+ import { Prisma }                     from '@prisma/client';
+-import { assertFeatureEnabled, getOrgIdForUser } from '@/lib/tenant';
++import { assertFeatureEnabled, getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ // Role-aware access check. Was importing assertMemorialAccess from
+ // '@/lib/tenant' (org-membership only, no role check) — a VIEWER-role org
+ // member could create/list product requests for any memorial in the org.
+@@ -66,6 +66,7 @@ export async function GET(
+     return NextResponse.json({ success: true, data: { requests } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     return handleAuthError(err);
+   }
+ }
+@@ -216,6 +217,7 @@ export async function POST(
+     return NextResponse.json({ success: true, data: { request } }, { status: 201 });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     return handleAuthError(err);
+   }
+ }
+diff --git a/app/api/org/branding/logo/route.ts b/app/api/org/branding/logo/route.ts
+index f3183ad..5e1f0d4 100644
+--- a/app/api/org/branding/logo/route.ts
++++ b/app/api/org/branding/logo/route.ts
+@@ -23,7 +23,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ import { saveUploadedFile }           from '@/lib/storage-server';
+ import { getPublicUrl }               from '@/lib/upload-shared';
+ import { verifyFileContent }          from '@/lib/file-validation';
+@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { url, blobKey } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/branding/logo/POST]', err);
+     return NextResponse.json({ success: false, error: 'Upload failed' }, { status: 500 });
+   }
+diff --git a/app/api/org/branding/route.ts b/app/api/org/branding/route.ts
+index 51794fb..da27f48 100644
+--- a/app/api/org/branding/route.ts
++++ b/app/api/org/branding/route.ts
+@@ -15,7 +15,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ import { validateBrandingUpdate }     from '@/lib/theme';
+ 
+ // ── GET ───────────────────────────────────────────────────────────────────────
+@@ -53,6 +53,7 @@ export async function GET(_req: NextRequest) {
+     return NextResponse.json({ success: true, data: { branding: org } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/branding/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -82,6 +83,7 @@ export async function PATCH(req: NextRequest) {
+     try {
+       updateData = validateBrandingUpdate(body);
+     } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+       return NextResponse.json(
+         { success: false, error: err.message ?? 'Validation error' },
+         { status: err.status ?? 400 },
+@@ -113,6 +115,7 @@ export async function PATCH(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { branding: updated } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/branding/PATCH]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/cases/[caseId]/route.ts b/app/api/org/cases/[caseId]/route.ts
+index 319419f..83dd7d9 100644
+--- a/app/api/org/cases/[caseId]/route.ts
++++ b/app/api/org/cases/[caseId]/route.ts
+@@ -11,7 +11,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ type Params = { params: Promise<{ caseId: string }> };
+ 
+@@ -82,6 +82,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { case: funeralCase } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/cases/[caseId]/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -227,6 +228,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { case: updated } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/cases/[caseId]/PATCH]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -269,6 +271,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { deleted: true } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/cases/[caseId]/DELETE]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/cases/csv-import/route.ts b/app/api/org/cases/csv-import/route.ts
+index 0041e35..09b715b 100644
+--- a/app/api/org/cases/csv-import/route.ts
++++ b/app/api/org/cases/csv-import/route.ts
+@@ -30,7 +30,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ import { createMemorial }             from '@/lib/memorial/createMemorial';
+ 
+ // ── Column aliases ────────────────────────────────────────────────────────────
+@@ -365,6 +365,7 @@ export async function POST(req: NextRequest) {
+     });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[csv-import/POST]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/cases/route.ts b/app/api/org/cases/route.ts
+index 960a734..377b419 100644
+--- a/app/api/org/cases/route.ts
++++ b/app/api/org/cases/route.ts
+@@ -12,7 +12,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ const VALID_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
+ type CaseStatus = typeof VALID_STATUSES[number];
+@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { cases } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/cases/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -173,6 +174,7 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { case: funeralCase } }, { status: 201 });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/cases/POST]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/pet-cases/[petCaseId]/route.ts b/app/api/org/pet-cases/[petCaseId]/route.ts
+index 2639adb..26de2e8 100644
+--- a/app/api/org/pet-cases/[petCaseId]/route.ts
++++ b/app/api/org/pet-cases/[petCaseId]/route.ts
+@@ -18,7 +18,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ type Params = { params: Promise<{ petCaseId: string }> };
+ 
+@@ -104,6 +104,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { petCase } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-cases/[petCaseId]/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -313,6 +314,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { petCase: updated } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-cases/[petCaseId]/PATCH]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -355,6 +357,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { deleted: true } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-cases/[petCaseId]/DELETE]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/pet-cases/route.ts b/app/api/org/pet-cases/route.ts
+index a862c00..6b99fb5 100644
+--- a/app/api/org/pet-cases/route.ts
++++ b/app/api/org/pet-cases/route.ts
+@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { randomUUID }                 from 'crypto';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ const VALID_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
+ type Status = typeof VALID_STATUSES[number];
+@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { petCases } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-cases/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -236,6 +237,7 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { petCase } }, { status: 201 });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-cases/POST]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/pet-intake-requests/[requestId]/route.ts b/app/api/org/pet-intake-requests/[requestId]/route.ts
+index 7fd91ca..7603522 100644
+--- a/app/api/org/pet-intake-requests/[requestId]/route.ts
++++ b/app/api/org/pet-intake-requests/[requestId]/route.ts
+@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { randomUUID }                 from 'crypto';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ type Params = { params: Promise<{ requestId: string }> };
+ 
+@@ -164,6 +164,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { petCase, request: updatedRequest } }, { status: 201 });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-intake-requests/[requestId]/PATCH]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/pet-intake-requests/route.ts b/app/api/org/pet-intake-requests/route.ts
+index 4a3a66c..3265ea9 100644
+--- a/app/api/org/pet-intake-requests/route.ts
++++ b/app/api/org/pet-intake-requests/route.ts
+@@ -7,7 +7,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ const VALID_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+ type Status = typeof VALID_STATUSES[number];
+@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { requests } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-intake-requests/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/pet-intake-token/route.ts b/app/api/org/pet-intake-token/route.ts
+index e8f38bb..ec511ba 100644
+--- a/app/api/org/pet-intake-token/route.ts
++++ b/app/api/org/pet-intake-token/route.ts
+@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { randomUUID }                 from 'crypto';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser }            from '@/lib/tenant';
++import { getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
+ 
+ async function guardFeature(orgId: string): Promise<NextResponse | null> {
+   const org = await prisma.organisation.findUnique({
+@@ -58,6 +58,7 @@ export async function GET(_req: NextRequest) {
+     return NextResponse.json({ success: true, data: { token } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-intake-token/GET]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+@@ -87,6 +88,7 @@ export async function POST(_req: NextRequest) {
+     return NextResponse.json({ success: true, data: { token } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     console.error('[org/pet-intake-token/POST]', err);
+     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
+   }
+diff --git a/app/api/org/products/[requestId]/route.ts b/app/api/org/products/[requestId]/route.ts
+index 3b9ac77..f275e8e 100644
+--- a/app/api/org/products/[requestId]/route.ts
++++ b/app/api/org/products/[requestId]/route.ts
+@@ -13,7 +13,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser, assertFeatureEnabled } from '@/lib/tenant';
++import { getOrgIdForUser, assertFeatureEnabled, orgErrorResponse } from '@/lib/tenant';
+ import {
+   isValidTransition,
+   applyTransition,
+@@ -110,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
+     return NextResponse.json({ success: true, data: { request: updated } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     return handleAuthError(err);
+   }
+ }
+diff --git a/app/api/org/products/route.ts b/app/api/org/products/route.ts
+index b753f01..b352744 100644
+--- a/app/api/org/products/route.ts
++++ b/app/api/org/products/route.ts
+@@ -13,7 +13,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { auth }                       from '@clerk/nextjs/server';
+ import { prisma }                     from '@/lib/prisma';
+-import { getOrgIdForUser, assertFeatureEnabled } from '@/lib/tenant';
++import { getOrgIdForUser, assertFeatureEnabled, orgErrorResponse } from '@/lib/tenant';
+ import { VALID_PRODUCT_TYPES } from '@/lib/products/transitions';
+ import { handleAuthError } from '@/lib/errors';
+ import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
+@@ -114,6 +114,7 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ success: true, data: { requests: formatted } });
+ 
+   } catch (err: any) {
++    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
+     return handleAuthError(err);
+   }
+ }
+diff --git a/app/api/public/memorial/[token]/guest-book/route.ts b/app/api/public/memorial/[token]/guest-book/route.ts
+index 3efb5d7..bad47eb 100644
+--- a/app/api/public/memorial/[token]/guest-book/route.ts
++++ b/app/api/public/memorial/[token]/guest-book/route.ts
+@@ -32,6 +32,7 @@ import { initialPublicStatus } from '@/lib/moderation';
+ import { MemorialStatus } from '@prisma/client';
+ import { AuditAction, ActorRole, EntityType, ReasonCode, createAuditEvent } from '@/lib/audit';
+ import { checkRateLimit } from '@/lib/rateLimit';
++import { getIpHashSalt } from '@/lib/ipSalt';
+ 
+ const MAX_MESSAGE_LEN  = 1000;   // matches GuestBookForm's textarea maxLength
+ const MAX_AUTHOR_LEN   = 100;    // matches GuestBookForm's input maxLength
+@@ -47,7 +48,7 @@ function hashIp(request: NextRequest): string | null {
+     || request.headers.get('x-real-ip')
+     || null;
+   if (!ip) return null;
+-  const salt = process.env.IP_HASH_SALT ?? 'memoriam-salt';
++  const salt = getIpHashSalt();
+   return createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 32);
+ }
+ 
+diff --git a/app/dashboard/memorial/[memorialId]/collection/page.tsx b/app/dashboard/memorial/[memorialId]/collection/page.tsx
+index 610a7e5..600fbf7 100644
+--- a/app/dashboard/memorial/[memorialId]/collection/page.tsx
++++ b/app/dashboard/memorial/[memorialId]/collection/page.tsx
+@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
+ import { CollectionWorkspace } from '@/components/collection/CollectionWorkspace';
+ import { assertMemorialAccess } from '@/lib/auth/getOrgForUser';
+ import { resolveMemorialFields } from '@/lib/memorial/resolveMemorialFields';
++import { getMemorialStorageUsage } from '@/lib/storage-quota';
+ 
+ interface Props {
+   params: Promise<{ memorialId: string }>;
+@@ -95,6 +96,8 @@ export default async function CollectionPage({ params }: Props) {
+     rejected: memorial.collectionItems.filter(i => i.status === 'REJECTED').length,
+   };
+ 
++  const storageUsage = await getMemorialStorageUsage(memorialId);
++
+   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+ 
+   return (
+@@ -120,6 +123,7 @@ export default async function CollectionPage({ params }: Props) {
+         createdAt: inv.createdAt.toISOString(),
+       }))}
+       counts={counts}
++      storage={{ usedBytes: storageUsage.usedBytes, limitBytes: storageUsage.limitBytes }}
+     />
+   );
+ }
+diff --git a/app/privacy/page.tsx b/app/privacy/page.tsx
+new file mode 100644
+index 0000000..f0390a0
+--- /dev/null
++++ b/app/privacy/page.tsx
+@@ -0,0 +1,73 @@
++// app/privacy/page.tsx
++//
++// DRAFT — describes what the code actually collects. NOT reviewed by a
++// lawyer. Review (Privacy Act 1988 / APPs) before real funeral homes sign up,
++// then bump CURRENT_TERMS_VERSION in lib/legal.ts.
++
++import type { Metadata } from 'next';
++import { LegalPage, H2 } from '@/components/legal/LegalPage';
++
++export const metadata: Metadata = { title: 'Privacy Policy — Absolute Posterity' };
++
++export default function PrivacyPage() {
++  return (
++    <LegalPage title="Privacy Policy">
++      <p>
++        This policy explains what personal information Absolute Posterity collects, why, and who can see
++        it. It covers Sites (funeral homes and similar providers), families, and visitors to memorial
++        pages.
++      </p>
++
++      <H2>What we collect</H2>
++      <p>
++        <strong>Site staff:</strong> name, email and sign-in details (handled by our authentication
++        provider), the organisation&rsquo;s details, and billing contact information.
++      </p>
++      <p>
++        <strong>Memorials and cases:</strong> the name, dates, service details and photos of the person
++        (or pet) being remembered, and family contact name, email and phone. Some fields may relate to
++        cultural background; these are optional and used only to present the memorial appropriately.
++      </p>
++      <p>
++        <strong>Visitors and contributors:</strong> anything they choose to submit (tributes, names,
++        locations, photos). For abuse prevention we store a one-way hash of the visitor&rsquo;s IP address,
++        not the address itself, and basic visit counts.
++      </p>
++
++      <H2>How we use it</H2>
++      <p>
++        To run the Service: displaying memorials, emailing handover and notification messages, producing
++        QR codes, billing Sites, preventing abuse, and keeping an audit trail of changes. We do not sell
++        personal information or use memorial content for advertising.
++      </p>
++
++      <H2>Who sees it</H2>
++      <p>
++        Published memorials are visible to anyone with the link or QR code (some may be protected by a
++        passcode). Site staff see their own Site&rsquo;s data only. We use service providers to operate
++        the Service &mdash; for example hosting, database, file storage, email delivery and
++        authentication &mdash; who process data on our behalf.
++      </p>
++
++      <H2>Where it is stored</H2>
++      <p>
++        Data is stored with our infrastructure providers, which may process it outside Australia. We
++        take reasonable steps to ensure it is protected.
++      </p>
++
++      <H2>Retention and deletion</H2>
++      <p>
++        Memorial content is kept while the memorial is active and for a period after it expires so it can
++        be restored. A family or Site can ask us to delete a memorial or personal information by emailing
++        us; we will act on verified requests promptly, subject to legal obligations.
++      </p>
++
++      <H2>Your rights</H2>
++      <p>
++        You may ask to access or correct personal information we hold about you, or make a privacy
++        complaint, by emailing us. If you are not satisfied with our response you can contact the Office
++        of the Australian Information Commissioner (oaic.gov.au).
++      </p>
++    </LegalPage>
++  );
++}
+diff --git a/app/terms/page.tsx b/app/terms/page.tsx
+new file mode 100644
+index 0000000..35d5fa1
+--- /dev/null
++++ b/app/terms/page.tsx
+@@ -0,0 +1,80 @@
++// app/terms/page.tsx
++//
++// DRAFT — written to match how the product actually behaves (invoice billing,
++// funeral-home sites, family handover). It has NOT been reviewed by a lawyer.
++// Have it reviewed before real funeral homes sign up, then bump
++// CURRENT_TERMS_VERSION in lib/legal.ts so existing sites are re-asked.
++
++import type { Metadata } from 'next';
++import { LegalPage, H2 } from '@/components/legal/LegalPage';
++
++export const metadata: Metadata = { title: 'Terms of Service — Absolute Posterity' };
++
++export default function TermsPage() {
++  return (
++    <LegalPage title="Terms of Service">
++      <p>
++        These terms govern use of Absolute Posterity (&ldquo;the Service&rdquo;) by funeral homes,
++        pet-aftercare providers and their staff (&ldquo;Sites&rdquo;), and by families and visitors who
++        use the memorial pages those Sites create. By creating an account you agree to them on behalf of
++        your organisation.
++      </p>
++
++      <H2>1. The Service</H2>
++      <p>
++        The Service lets a Site create online memorials, collect photos, stories and tributes from
++        families, and hand a memorial over to the family. We may change or improve features over time.
++      </p>
++
++      <H2>2. Your responsibilities</H2>
++      <p>
++        You must have the authority of the family (or the pet&rsquo;s owner) to create a memorial, and you
++        must only upload content you have the right to use. You must not create memorials for people who
++        are living, to impersonate or harass anyone, or to publish unlawful, defamatory or abusive
++        content. You are responsible for your staff&rsquo;s use of your account and for keeping sign-in
++        details secure.
++      </p>
++
++      <H2>3. Content and moderation</H2>
++      <p>
++        You and the family own the content on a memorial. You give us a licence to store, process and
++        display it as needed to run the Service. Visitor submissions (tributes, guest-book entries,
++        photos) may be held for approval; the memorial owner is responsible for what they approve. We may
++        remove content or suspend a memorial that breaches these terms or that we are legally required to
++        remove. To report a memorial, email support@memoriam.com.
++      </p>
++
++      <H2>4. Fees and billing</H2>
++      <p>
++        Fees are charged by invoice in Australian dollars: a monthly platform fee plus a fee for each
++        memorial created, at the rates agreed with your Site (or our published defaults). A free trial may
++        apply to new Sites; during the trial no charges accrue and trial limits may apply. Statements are
++        emailed monthly and are payable by the due date shown. We may suspend the ability to create new
++        memorials on an overdue account; existing memorials stay accessible.
++      </p>
++
++      <H2>5. Handover to families</H2>
++      <p>
++        A Site may hand a memorial over to the family. After handover the family controls the memorial and
++        the Site&rsquo;s staff access ends, as described in the product at the time of handover.
++      </p>
++
++      <H2>6. Availability and liability</H2>
++      <p>
++        We aim to keep the Service available and to protect stored content, but we do not guarantee
++        uninterrupted service. To the extent the law allows, our liability is limited to the fees you paid
++        in the preceding three months, and we are not liable for indirect or consequential loss. Nothing
++        in these terms excludes rights you have under the Australian Consumer Law that cannot be excluded.
++      </p>
++
++      <H2>7. Ending the agreement</H2>
++      <p>
++        You may stop using the Service at any time. We may suspend or end access for breach of these
++        terms. Content is retained as described in our Privacy Policy.
++      </p>
++
++      <H2>8. Governing law</H2>
++      <p>These terms are governed by the laws of Queensland, Australia.</p>
++    </LegalPage>
++  );
++}
+diff --git a/apply-update.ps1 b/apply-update.ps1
+deleted file mode 100644
+index 73dc898..0000000
+--- a/apply-update.ps1
++++ /dev/null
+@@ -1,26 +0,0 @@
+-# apply-update.ps1 — run from the project root AFTER the zip has been extracted.
+-$ErrorActionPreference = 'Continue'
+-Write-Host "1/5 Removing old Stripe files..." -ForegroundColor Cyan
+-$stale = @(
+-  'app\api\billing\checkout','app\api\billing\portal','app\api\billing\webhook',
+-  'app\api\cron\reset-usage','app\onboarding\payment',
+-  'components\onboarding\OnboardingSteps.tsx','lib\stripe.ts',
+-  'lib\billing\format.ts','lib\billing\__tests__\format.test.ts'
+-)
+-foreach ($p in $stale) { if (Test-Path $p) { Remove-Item -Recurse -Force $p; Write-Host "   removed $p" } }
+-
+-Write-Host "2/5 Clearing build cache..." -ForegroundColor Cyan
+-if (Test-Path .next) { Remove-Item -Recurse -Force .next }
+-
+-Write-Host "3/5 Installing packages (drops stripe)..." -ForegroundColor Cyan
+-npm install --no-audit --no-fund
+-
+-Write-Host "4/5 Regenerating Prisma client..." -ForegroundColor Cyan
+-npx prisma generate
+-
+-Write-Host "5/5 Type-checking..." -ForegroundColor Cyan
+-npx tsc --noEmit
+-if ($LASTEXITCODE -eq 0) {
+-  Write-Host "`nAll good: 0 type errors." -ForegroundColor Green
+-  Write-Host "Next: set BILLING_PAYMENT_INSTRUCTIONS in Vercel (lowercase true/false for BILLING_AUTO_SEND), then: npx prisma migrate deploy ; git add -A ; git commit -m 'Manual billing' ; git push" -ForegroundColor Yellow
+-} else { Write-Host "`nType errors above - paste them to me." -ForegroundColor Red }
+diff --git a/audit-fixes.zip b/audit-fixes.zip
+deleted file mode 100644
+index f142136c7da97868404148defb4b419239b05ecb..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 19806
+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
+
+diff --git a/components/collection/BulkUploadPanel.tsx b/components/collection/BulkUploadPanel.tsx
+new file mode 100644
+index 0000000..23cc060
+--- /dev/null
++++ b/components/collection/BulkUploadPanel.tsx
+@@ -0,0 +1,280 @@
++'use client';
++
++// Staff bulk upload for a memorial's Collection.
++//
++// Flow: choose/drop many files → pre-check in the browser (type, size, and the
++// memorial's remaining storage) → POST …/bulk/prepare → PUT each file straight
++// to the bucket (3 at a time, with progress + retry) → POST …/bulk/complete,
++// which re-verifies everything server-side and records the items.
++// In local dev (no bucket) it falls back to the single-file route.
++
++import { useCallback, useRef, useState } from 'react';
++import {
++  BULK_ACCEPT_ATTR, BULK_LIMITS, formatBytes, planBulkBatch, resolveMimeType, titleFromFileName,
++} from '@/lib/bulk-upload';
++
++type Status = 'queued' | 'uploading' | 'uploaded' | 'done' | 'failed';
++
++interface Row {
++  id:       number;
++  file:     File;
++  status:   Status;
++  progress: number;      // 0-100 while uploading
++  error?:   string;
++  key?:     string;
++  url?:     string;
++  mime?:    string;
++}
++
++interface Storage { usedBytes: number; limitBytes: number }
++
++interface Props {
++  memorialId:   string;
++  storage:      Storage;
++  onItemsAdded: (items: any[]) => void;
++}
++
++const CONCURRENCY = 3;
++const COMPLETE_CHUNK = 50;
++
++function putWithProgress(url: string, file: File, mime: string, onProgress: (p: number) => void, track: Set<XMLHttpRequest>): Promise<void> {
++  return new Promise((resolve, reject) => {
++    const xhr = new XMLHttpRequest();
++    track.add(xhr);
++    xhr.open('PUT', url);
++    xhr.setRequestHeader('Content-Type', mime);
++    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
++    xhr.onload  = () => { track.delete(xhr); xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)); };
++    xhr.onerror = () => { track.delete(xhr); reject(new Error('Network error')); };
++    xhr.onabort = () => { track.delete(xhr); reject(new Error('Cancelled')); };
++    xhr.send(file);
++  });
++}
++
++export function BulkUploadPanel({ memorialId, storage, onItemsAdded }: Props) {
++  const [rows,    setRows]    = useState<Row[]>([]);
++  const [used,    setUsed]    = useState(storage.usedBytes);
++  const [running, setRunning] = useState(false);
++  const [banner,  setBanner]  = useState<string | null>(null);
++  const [drag,    setDrag]    = useState(false);
++  const inputRef  = useRef<HTMLInputElement>(null);
++  const nextId    = useRef(1);
++  const cancelled = useRef(false);
++  const xhrs      = useRef(new Set<XMLHttpRequest>());
++
++  const patch = useCallback((id: number, p: Partial<Row>) => {
++    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...p } : r)));
++  }, []);
++
++  const remaining = Math.max(0, storage.limitBytes - used);
++  const pct = Math.min(100, Math.round((used / storage.limitBytes) * 100));
++  const queued = rows.filter((r) => r.status === 'queued');
++  const queuedBytes = queued.reduce((n, r) => n + r.file.size, 0);
++
++  function addFiles(list: FileList | File[]) {
++    setBanner(null);
++    const incoming = Array.from(list);
++    const room = BULK_LIMITS.maxFilesPerBatch - queued.length;
++    if (room <= 0) { setBanner(`Up to ${BULK_LIMITS.maxFilesPerBatch} files per run — upload these first, then add more.`); return; }
++
++    const take = incoming.slice(0, room);
++    if (incoming.length > room) setBanner(`Only the first ${room} files were added (limit ${BULK_LIMITS.maxFilesPerBatch} per run).`);
++
++    // Same rules as the server, applied against what's already queued.
++    const plan = planBulkBatch(
++      take.map((f) => ({ name: f.name, type: f.type, size: f.size })),
++      Math.max(0, remaining - queuedBytes),
++    );
++    const bad = new Map(plan.rejected.map((r) => [r.index, r.reason]));
++
++    setRows((prev) => [
++      ...prev,
++      ...take.map((file, i): Row => ({
++        id: nextId.current++, file,
++        status: bad.has(i) ? 'failed' : 'queued', progress: 0,
++        error: bad.get(i),
++        mime: resolveMimeType(file.name, file.type),
++      })),
++    ]);
++    if (inputRef.current) inputRef.current.value = '';
++  }
++
++  async function start() {
++    const batch = rows.filter((r) => r.status === 'queued');
++    if (batch.length === 0) return;
++    cancelled.current = false;
++    setRunning(true);
++    setBanner(null);
++
++    try {
++      const prep = await fetch(`/api/memorial/${memorialId}/collection/bulk/prepare`, {
++        method: 'POST', headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ files: batch.map((r) => ({ name: r.file.name, type: r.mime ?? r.file.type, size: r.file.size })) }),
++      });
++      const pj = await prep.json();
++      if (!prep.ok) throw new Error(pj.error ?? 'Could not start upload');
++      const { mode, accepted, rejected } = pj.data as { mode: 'direct' | 'server'; accepted: any[]; rejected: any[] };
++
++      for (const r of rejected) patch(batch[r.index].id, { status: 'failed', error: r.reason });
++
++      // ── Upload ────────────────────────────────────────────────────────────
++      const work = accepted.map((a) => ({ row: batch[a.index], a }));
++      const added: any[] = [];
++      const uploaded = new Set<number>(); // row ids whose bytes reached the bucket
++
++      async function worker() {
++        for (let w = work.shift(); w && !cancelled.current; w = work.shift()) {
++          const { row, a } = w;
++          patch(row.id, { status: 'uploading', progress: 0, key: a.key, url: a.uploadUrl });
++          try {
++            if (mode === 'server') {
++              const fd = new FormData();
++              fd.append('type', a.type); fd.append('title', titleFromFileName(row.file.name)); fd.append('file', row.file);
++              const res = await fetch(`/api/memorial/${memorialId}/collection`, { method: 'POST', body: fd });
++              const j = await res.json();
++              if (!res.ok) throw new Error(j.error ?? 'Upload failed');
++              added.push(j.data.item);
++              patch(row.id, { status: 'done', progress: 100 });
++            } else {
++              let lastErr: unknown;
++              for (let attempt = 0; attempt < 3 && !cancelled.current; attempt++) {
++                try {
++                  await putWithProgress(a.uploadUrl, row.file, a.mimeType, (p) => patch(row.id, { progress: p }), xhrs.current);
++                  lastErr = undefined; break;
++                } catch (e) {
++                  lastErr = e;
++                  if (cancelled.current) break;
++                  await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
++                }
++              }
++              if (lastErr) throw lastErr;
++              uploaded.add(row.id);
++              patch(row.id, { status: 'uploaded', progress: 100 });
++            }
++          } catch (e) {
++            patch(row.id, { status: 'failed', error: e instanceof Error ? e.message : 'Upload failed' });
++          }
++        }
++      }
++      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
++
++      // ── Record what landed (even after Cancel, so nothing is orphaned) ────
++      if (mode === 'direct') {
++        const landed = accepted
++          .map((a) => ({ row: batch[a.index], a }))
++          .filter(({ row }) => uploaded.has(row.id));
++        for (let i = 0; i < landed.length; i += COMPLETE_CHUNK) {
++          const chunk = landed.slice(i, i + COMPLETE_CHUNK);
++          const res = await fetch(`/api/memorial/${memorialId}/collection/bulk/complete`, {
++            method: 'POST', headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ items: chunk.map(({ row, a }) => ({ key: a.key, name: row.file.name, size: row.file.size, mimeType: a.mimeType })) }),
++          });
++          const j = await res.json();
++          if (!res.ok) { for (const { row } of chunk) patch(row.id, { status: 'failed', error: j.error ?? 'Could not save' }); continue; }
++          const failedKeys = new Map<string, string>((j.data.failed as any[]).map((f) => [f.key, f.reason]));
++          for (const { row, a } of chunk) {
++            if (failedKeys.has(a.key)) patch(row.id, { status: 'failed', error: failedKeys.get(a.key) });
++            else patch(row.id, { status: 'done' });
++          }
++          added.push(...j.data.items);
++        }
++      }
++
++      if (added.length) {
++        onItemsAdded(added);
++        setUsed((u) => u + added.reduce((n, it) => n + (it.sizeBytes ?? 0), 0));
++      }
++    } catch (e) {
++      setBanner(e instanceof Error ? e.message : 'Upload failed');
++      setRows((prev) => prev.map((r) => (r.status === 'uploading' ? { ...r, status: 'failed', error: 'Interrupted' } : r)));
++    } finally {
++      setRunning(false);
++    }
++  }
++
++  function cancel() {
++    cancelled.current = true;
++    xhrs.current.forEach((x) => x.abort());
++  }
++
++  function retryFailed() {
++    setRows((prev) => prev.map((r) => (r.status === 'failed' && !/Unsupported|Too large|storage limit/.test(r.error ?? '') ? { ...r, status: 'queued', progress: 0, error: undefined } : r)));
++  }
++
++  const done   = rows.filter((r) => r.status === 'done').length;
++  const failed = rows.filter((r) => r.status === 'failed').length;
++
++  return (
++    <div className="card" style={{ padding: '1.5rem' }}>
++      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', fontWeight: 500, color: 'var(--ink)', marginBottom: '0.25rem' }}>
++        Bulk upload
++      </h3>
++      <p style={{ fontSize: '0.78rem', color: 'var(--ash)', fontFamily: 'var(--font-body)', margin: '0 0 1rem' }}>
++        Add many photos, videos and documents at once (up to {BULK_LIMITS.maxFilesPerBatch} per run). Everything lands as <b>Unsorted</b> for you to review.
++      </p>
++
++      {/* Storage meter */}
++      <div style={{ marginBottom: '1rem' }}>
++        <div style={{ height: 8, borderRadius: 999, background: 'var(--ivory-mid)', overflow: 'hidden' }}>
++          <div style={{ width: `${pct}%`, height: '100%', background: pct > 90 ? '#B91C1C' : 'var(--ink)', transition: 'width 0.3s' }} />
++        </div>
++        <p style={{ fontSize: '0.72rem', color: 'var(--ash)', fontFamily: 'var(--font-body)', margin: '0.35rem 0 0' }}>
++          {formatBytes(used)} of {formatBytes(storage.limitBytes)} used · {formatBytes(remaining)} left
++          {queued.length > 0 && <> · this run: {queued.length} file{queued.length !== 1 ? 's' : ''}, {formatBytes(queuedBytes)}</>}
++        </p>
++      </div>
++
++      {/* Drop zone */}
++      <div
++        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
++        onDragLeave={() => setDrag(false)}
++        onDrop={(e) => { e.preventDefault(); setDrag(false); if (!running) addFiles(e.dataTransfer.files); }}
++        onClick={() => !running && inputRef.current?.click()}
++        style={{
++          border: `2px dashed ${drag ? 'var(--ink)' : 'var(--ivory-mid)'}`, borderRadius: 10, padding: '1.5rem',
++          textAlign: 'center', cursor: running ? 'default' : 'pointer', background: drag ? 'rgba(0,0,0,0.02)' : 'transparent',
++          fontFamily: 'var(--font-body)', fontSize: '0.85rem', color: 'var(--ash)',
++        }}
++      >
++        Drag files here, or <u>choose files</u>
++        <input ref={inputRef} type="file" multiple accept={BULK_ACCEPT_ATTR} hidden
++               onChange={(e) => e.target.files && addFiles(e.target.files)} />
++      </div>
++
++      {banner && <p style={{ fontSize: '0.8rem', color: '#991B1B', fontFamily: 'var(--font-body)', marginTop: '0.75rem' }}>{banner}</p>}
++
++      {rows.length > 0 && (
++        <>
++          <ul style={{ listStyle: 'none', margin: '1rem 0 0', padding: 0, maxHeight: 260, overflowY: 'auto', fontFamily: 'var(--font-body)', fontSize: '0.78rem' }}>
++            {rows.map((r) => (
++              <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.3rem 0', borderBottom: '1px solid var(--ivory-mid)' }}>
++                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)' }}>
++                  {r.file.name} <span style={{ color: 'var(--ash)' }}>· {formatBytes(r.file.size)}</span>
++                </span>
++                <span style={{ width: 150, textAlign: 'right', color: r.status === 'failed' ? '#991B1B' : r.status === 'done' ? '#065F46' : 'var(--ash)' }}>
++                  {r.status === 'uploading' && `Uploading ${r.progress}%`}
++                  {r.status === 'queued' && 'Ready'}
++                  {r.status === 'uploaded' && 'Saving…'}
++                  {r.status === 'done' && 'Added ✓'}
++                  {r.status === 'failed' && (r.error ?? 'Failed')}
++                </span>
++              </li>
++            ))}
++          </ul>
++
++          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap' }}>
++            <button className="btn-primary" disabled={running || queued.length === 0} onClick={start}>
++              {running ? 'Uploading…' : `Upload ${queued.length} file${queued.length !== 1 ? 's' : ''}`}
++            </button>
++            {running && <button onClick={cancel} style={{ fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>}
++            {!running && failed > 0 && <button onClick={retryFailed} style={{ fontSize: '0.8rem', cursor: 'pointer' }}>Retry failed</button>}
++            {!running && <button onClick={() => setRows((p) => p.filter((r) => r.status !== 'done'))} style={{ fontSize: '0.8rem', cursor: 'pointer' }}>Clear finished</button>}
++            <span style={{ fontSize: '0.75rem', color: 'var(--ash)', fontFamily: 'var(--font-body)' }}>
++              {done} added{failed ? ` · ${failed} problem${failed !== 1 ? 's' : ''}` : ''}
++            </span>
++          </div>
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/components/collection/CollectionWorkspace.tsx b/components/collection/CollectionWorkspace.tsx
+index 9ae9efb..fe091f6 100644
+--- a/components/collection/CollectionWorkspace.tsx
++++ b/components/collection/CollectionWorkspace.tsx
+@@ -3,6 +3,7 @@
+ import { useState, useRef, useCallback, useEffect } from 'react';
+ import Link from 'next/link';
+ import { getPublicUrl } from '@/lib/upload-shared';
++import { BulkUploadPanel } from '@/components/collection/BulkUploadPanel';
+ 
+ // ── Types ──────────────────────────────────────────────────────────────────
+ 
+@@ -52,6 +53,7 @@ interface Props {
+   items:    CollectionItem[];
+   invites:  CollectionInvite[];
+   counts:   { total: number; unsorted: number; ready: number; approved: number; rejected: number };
++  storage:  { usedBytes: number; limitBytes: number };
+ }
+ 
+ // ── Status config ──────────────────────────────────────────────────────────
+@@ -588,7 +590,7 @@ function InvitePanel({ memorialId, invites: initialInvites }: { memorialId: stri
+ 
+ // ── Main Workspace ─────────────────────────────────────────────────────────
+ 
+-export function CollectionWorkspace({ memorial, items: initialItems, invites, counts: initialCounts }: Props) {
++export function CollectionWorkspace({ memorial, items: initialItems, invites, counts: initialCounts, storage }: Props) {
+   const [items,  setItems]  = useState(initialItems);
+   const [filter, setFilter] = useState<string>('ALL');
+   const [tab,    setTab]    = useState<'items' | 'invites'>('items');
+@@ -628,6 +630,10 @@ export function CollectionWorkspace({ memorial, items: initialItems, invites, co
+     setItems(prev => [item, ...prev]);
+   }, []);
+ 
++  const handleBulkAdded = useCallback((added: CollectionItem[]) => {
++    setItems(prev => [...added, ...prev]);
++  }, []);
++
+   const FILTERS = [
+     { key: 'ALL',      label: `All (${counts.total})` },
+     { key: 'UNSORTED', label: `Unsorted (${counts.unsorted})` },
+@@ -725,6 +731,7 @@ export function CollectionWorkspace({ memorial, items: initialItems, invites, co
+ 
+           {/* Content */}
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
++            <BulkUploadPanel memorialId={memorial.id} storage={storage} onItemsAdded={handleBulkAdded} />
+             <UploadForm memorialId={memorial.id} onSuccess={handleUploadSuccess} />
+ 
+             {filtered.length === 0 ? (
+diff --git a/components/legal/LegalPage.tsx b/components/legal/LegalPage.tsx
+new file mode 100644
+index 0000000..8b81c5c
+--- /dev/null
++++ b/components/legal/LegalPage.tsx
+@@ -0,0 +1,29 @@
++// components/legal/LegalPage.tsx
++//
++// Shared shell for /terms and /privacy. Server component, no client JS.
++// The version/date shown comes from lib/legal.ts so the page and the consent
++// record stored at onboarding (Organisation.termsAcceptedVersion) cannot drift.
++
++import type { ReactNode } from 'react';
++import Link from 'next/link';
++import { CURRENT_TERMS_VERSION } from '@/lib/legal';
++
++export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
++  return (
++    <main style={{ minHeight: '100vh', background: '#f4f1ea', padding: '3rem 1.5rem', fontFamily: "'Lora', Georgia, serif" }}>
++      <article style={{ maxWidth: 760, margin: '0 auto', background: '#fdfcfa', borderRadius: 16, padding: '2.5rem', boxShadow: '0 20px 60px rgba(79,93,117,0.12)', color: '#2d2a26', lineHeight: 1.7 }}>
++        <p style={{ margin: 0 }}><Link href="/" style={{ color: '#7c6d5a', fontSize: 14 }}>&larr; Absolute Posterity</Link></p>
++        <h1 style={{ fontSize: 32, margin: '1rem 0 0.25rem' }}>{title}</h1>
++        <p style={{ margin: '0 0 2rem', color: '#7c6d5a', fontSize: 14 }}>Last updated: {CURRENT_TERMS_VERSION}</p>
++        {children}
++        <p style={{ marginTop: '2.5rem', fontSize: 14, color: '#7c6d5a' }}>
++          Questions? Email <a href="mailto:support@memoriam.com" style={{ color: '#7c6d5a' }}>support@memoriam.com</a>.
++        </p>
++      </article>
++    </main>
++  );
++}
++
++export const H2 = ({ children }: { children: ReactNode }) => (
++  <h2 style={{ fontSize: 20, margin: '2rem 0 0.5rem' }}>{children}</h2>
++);
+diff --git a/components/memorial/MemorialPageClient.tsx b/components/memorial/MemorialPageClient.tsx
+index 6f5cf06..b676105 100644
+--- a/components/memorial/MemorialPageClient.tsx
++++ b/components/memorial/MemorialPageClient.tsx
+@@ -695,6 +695,15 @@ export function MemorialPageClient({ memorial }: { memorial: Memorial }) {
+         </p>
+         <p style={{ fontSize: '0.65rem', color: '#2a2018', letterSpacing: '0.06em' }}>
+           Absolute Posterity
++          {' · '}
++          {/* Takedown route: anyone who sees a memorial that shouldn't exist
++              (wrong person, living person, abuse) can tell us from the page. */}
++          <a
++            href={`mailto:support@memoriam.com?subject=${encodeURIComponent(`Report a memorial: ${memorial.displayName}`)}&body=${encodeURIComponent('Page address: ')}`}
++            style={{ color: 'inherit', textDecoration: 'underline' }}
++          >
++            Report this memorial
++          </a>
+         </p>
+       </footer>
+ 
+diff --git a/docs/BULK_UPLOAD.md b/docs/BULK_UPLOAD.md
+new file mode 100644
+index 0000000..9ea49a2
+--- /dev/null
++++ b/docs/BULK_UPLOAD.md
+@@ -0,0 +1,49 @@
++# Staff bulk upload
++
++Collection page → **Bulk upload**. Staff drop up to 100 photos / videos / documents per run.
++Everything lands as **Unsorted** in the Collection for review, like any other staff upload.
++
++## Limits
++- **5 GB per memorial total** (`STORAGE_MB_PER_MEMORIAL` in `lib/storage-quota.ts`) — the same cap
++  every other upload route enforces. Files are accepted in the order dropped until the memorial is
++  full; the rest are rejected with "Would exceed this memorial's storage limit". Nothing goes over.
++- Per file: 50 MB photos/documents, 200 MB video (same as the single-file routes).
++- 100 files per run (drop more in further runs).
++- Types: JPG, PNG, WebP, HEIC/HEIF, MP4, MOV, AVI, WebM, PDF, DOC, DOCX.
++
++## How it works (and why)
++Vercel Functions reject request bodies over ~4.5 MB, so files can't pass through an API route.
++1. `POST …/collection/bulk/prepare` — browser sends file names/types/sizes. Server applies the rules
++   above and returns a short-lived presigned R2 URL per accepted file.
++2. Browser PUTs each file straight to R2 (3 at a time, progress, 2 retries).
++3. `POST …/collection/bulk/complete` — server does NOT trust step 2: it checks each key is one it
++   issued for this memorial, HEADs the object (real size), re-checks per-file size, reads the first
++   4 KB and verifies magic bytes, re-checks the 5 GB cap on real sizes, deletes anything that fails,
++   and records the rest (+ one audit event each). Safe to retry.
++
++Local dev (no bucket) falls back to the existing single-file route, one file at a time.
++
++## REQUIRED one-time setup: R2 CORS
++The browser PUTs cross-origin to R2, so the bucket needs a CORS rule (Cloudflare dashboard →
++R2 → your bucket → Settings → CORS policy). Use your real app origin(s):
++
++```json
++[
++  {
++    "AllowedOrigins": ["https://YOUR-APP-DOMAIN"],
++    "AllowedMethods": ["PUT"],
++    "AllowedHeaders": ["content-type"],
++    "ExposeHeaders": ["ETag"],
++    "MaxAgeSeconds": 3600
++  }
++]
++```
++(The app's CSP `connect-src` already allows `https://*.r2.cloudflarestorage.com` — see proxy.ts.)
++
++## Known limits / follow-ups
++- If a user closes the tab after step 2 but before step 3, the uploaded objects are orphaned in the
++  bucket (they are not counted toward quota or shown). A periodic cleanup of unreferenced
++  `collection/<id>/…` objects older than a day would reclaim them.
++- Quota is check-then-write, like the other routes: two staff bulk-uploading to the SAME memorial at
++  the same instant could overshoot slightly. `complete` re-checks on real sizes to keep it tight.
++- `CollectionItem.sizeBytes` is a 32-bit Int, so single files must stay under 2 GB (limits are far below).
+diff --git a/env.example b/env.example
+index 75bc78b..52c9afb 100644
+--- a/env.example
++++ b/env.example
+@@ -77,4 +77,4 @@ LOCAL_UPLOAD_DIR="./uploads"
+ # enforce signed-out API calls get 401, pages redirect to sign-in. Unknown paths blocked.
+ # off     disable the layer (emergency switch).
+ # Roll out: deploy in log mode -> use the app -> check Vercel logs are clean -> enforce.
+-EDGE_AUTH_MODE="log"
++EDGE_AUTH_MODE="enforce"
+diff --git a/fix-env-boot-crash.patch b/fix-env-boot-crash.patch
+deleted file mode 100644
+index 9926996..0000000
+--- a/fix-env-boot-crash.patch
++++ /dev/null
+@@ -1,152 +0,0 @@
+-From fa166c6d543adca0a0a30d048d75aeb53362281f Mon Sep 17 00:00:00 2001
+-From: Claude <noreply@anthropic.com>
+-Date: Wed, 14 Oct 2026 07:47:23 +0000
+-Subject: [PATCH] Fix boot crash: make BILLING_AUTO_SEND/BILLING_DUE_DAYS
+- forgiving (FALSE, blank, typos)
+-
+----
+- app/api/cron/billing/route.ts     |  4 +-
+- lib/__tests__/env-billing.test.ts | 63 +++++++++++++++++++++++++++++++
+- lib/billing/statements.ts         |  5 +++
+- lib/env.ts                        | 16 +++++++-
+- 4 files changed, 84 insertions(+), 4 deletions(-)
+- create mode 100644 lib/__tests__/env-billing.test.ts
+-
+-diff --git a/app/api/cron/billing/route.ts b/app/api/cron/billing/route.ts
+-index c41f6fa..efedd91 100644
+---- a/app/api/cron/billing/route.ts
+-+++ b/app/api/cron/billing/route.ts
+-@@ -17,7 +17,7 @@
+- 
+- import { NextRequest, NextResponse } from 'next/server';
+- import { isValidCronSecret } from '@/lib/timingSafe';
+--import { generateAllStatements, sendStatement } from '@/lib/billing/statements';
+-+import { generateAllStatements, sendStatement, isAutoSendEnabled } from '@/lib/billing/statements';
+- import { periodKeyFor, previousPeriodKey } from '@/lib/billing/period';
+- import { getReviewSummary } from '@/lib/billing/adminSummary';
+- import { notifyAdminBillsReady } from '@/lib/billing/adminNotify';
+-@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
+-     const results = await generateAllStatements(period);
+- 
+-     let sent = 0, sendFailed = 0;
+--    if (process.env.BILLING_AUTO_SEND === 'true') {
+-+    if (isAutoSendEnabled()) {
+-       for (const r of results) {
+-         if ((r.outcome === 'created' || r.outcome === 'regenerated') && r.statementId) {
+-           const s = await sendStatement(r.statementId);
+-diff --git a/lib/__tests__/env-billing.test.ts b/lib/__tests__/env-billing.test.ts
+-new file mode 100644
+-index 0000000..3678093
+---- /dev/null
+-+++ b/lib/__tests__/env-billing.test.ts
+-@@ -0,0 +1,63 @@
+-+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-+
+-+vi.mock('@/lib/prisma', () => ({ prisma: {} }));
+-+vi.mock('@clerk/nextjs/server', () => ({ clerkClient: vi.fn() }));
+-+vi.mock('@/lib/email', () => ({ sendEmail: vi.fn(), getAppUrl: () => 'http://x' }));
+-+
+-+import { isAutoSendEnabled } from '../billing/statements';
+-+
+-+const VALID = {
+-+  DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+-+  CLERK_SECRET_KEY: 'sk_test_x',
+-+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_x',
+-+  RESEND_API_KEY: 're_x',
+-+  CRON_SECRET: 'c'.repeat(40),
+-+  FAMILY_SESSION_SECRET: 'f'.repeat(40),
+-+  NODE_ENV: 'test',
+-+};
+-+
+-+describe('billing env flags never stop the site booting', () => {
+-+  const saved = { ...process.env };
+-+  beforeEach(() => { vi.resetModules(); Object.assign(process.env, VALID); });
+-+  afterEach(() => { process.env = { ...saved }; });
+-+
+-+  const boot = async (extra: Record<string, string>) => {
+-+    Object.assign(process.env, extra);
+-+    const { getEnv } = await import('../env');
+-+    return getEnv();
+-+  };
+-+
+-+  // The exact value that took production down.
+-+  it('accepts BILLING_AUTO_SEND=FALSE', async () => {
+-+    expect((await boot({ BILLING_AUTO_SEND: 'FALSE' })).BILLING_AUTO_SEND).toBe('false');
+-+  });
+-+  it('accepts TRUE / True / 1 as true', async () => {
+-+    for (const v of ['TRUE', 'True', '1']) {
+-+      vi.resetModules();
+-+      expect((await boot({ BILLING_AUTO_SEND: v })).BILLING_AUTO_SEND).toBe('true');
+-+    }
+-+  });
+-+  it('treats garbage or blank as false instead of crashing', async () => {
+-+    for (const v of ['banana', '']) {
+-+      vi.resetModules();
+-+      expect((await boot({ BILLING_AUTO_SEND: v })).BILLING_AUTO_SEND).toBe('false');
+-+    }
+-+  });
+-+  it('treats a blank BILLING_DUE_DAYS as unset, not 0', async () => {
+-+    expect((await boot({ BILLING_DUE_DAYS: '' })).BILLING_DUE_DAYS).toBeUndefined();
+-+  });
+-+  it('still reads a real BILLING_DUE_DAYS', async () => {
+-+    expect((await boot({ BILLING_DUE_DAYS: '21' })).BILLING_DUE_DAYS).toBe(21);
+-+  });
+-+});
+-+
+-+describe('isAutoSendEnabled (used by the monthly cron)', () => {
+-+  const orig = process.env.BILLING_AUTO_SEND;
+-+  afterEach(() => { if (orig === undefined) delete process.env.BILLING_AUTO_SEND; else process.env.BILLING_AUTO_SEND = orig; });
+-+
+-+  for (const [v, want] of [['true', true], ['TRUE', true], [' True ', true], ['1', true], ['yes', true],
+-+                           ['false', false], ['FALSE', false], ['', false], ['banana', false]] as const) {
+-+    it(`"${v}" → ${want}`, () => { process.env.BILLING_AUTO_SEND = v; expect(isAutoSendEnabled()).toBe(want); });
+-+  }
+-+  it('unset → false', () => { delete process.env.BILLING_AUTO_SEND; expect(isAutoSendEnabled()).toBe(false); });
+-+});
+-diff --git a/lib/billing/statements.ts b/lib/billing/statements.ts
+-index d651067..00510d1 100644
+---- a/lib/billing/statements.ts
+-+++ b/lib/billing/statements.ts
+-@@ -163,6 +163,11 @@ export async function generateAllStatements(
+- 
+- // ── Send ─────────────────────────────────────────────────────────────────────
+- 
+-+/** BILLING_AUTO_SEND, case-insensitive. Anything unrecognised means OFF. */
+-+export function isAutoSendEnabled(): boolean {
+-+  return ['true', '1', 'yes', 'on'].includes((process.env.BILLING_AUTO_SEND ?? '').trim().toLowerCase());
+-+}
+-+
+- export function getPaymentInstructions(): string {
+-   // Env vars are single-line; allow a literal "\n" to mean a line break.
+-   return (process.env.BILLING_PAYMENT_INSTRUCTIONS ?? '').replace(/\\n/g, '\n').trim();
+-diff --git a/lib/env.ts b/lib/env.ts
+-index b22acf6..d84c762 100644
+---- a/lib/env.ts
+-+++ b/lib/env.ts
+-@@ -33,9 +33,21 @@ const EnvSchema = z.object({
+-   // BILLING_PAYMENT_INSTRUCTIONS is set (a bill with no way to pay it is
+-   // refused by lib/billing/statements.ts, and a warning is logged at boot).
+-   BILLING_PAYMENT_INSTRUCTIONS: z.string().optional(), // bank details etc; "\\n" = line break
+--  BILLING_DUE_DAYS: z.coerce.number().int().positive().max(365).optional(), // default 14
+-+  // Empty string (a blank var in Vercel) is treated as unset, not as 0.
+-+  BILLING_DUE_DAYS: z.preprocess(
+-+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+-+    z.coerce.number().int().positive().max(365).optional(),
+-+  ), // default 14
+-   BILLING_TIMEZONE: z.string().optional(),             // default Australia/Sydney
+--  BILLING_AUTO_SEND: z.enum(['true', 'false']).optional(), // email statements automatically from the monthly cron
+-+  // Forgiving on purpose: TRUE / True / 1 / yes / on all mean true; FALSE / 0 / no / off / blank mean false.
+-+  // A typo in an optional flag must never stop the whole site from booting.
+-+  BILLING_AUTO_SEND: z.preprocess((v) => {
+-+    if (typeof v !== 'string') return v;
+-+    const t = v.trim().toLowerCase();
+-+    if (['true', '1', 'yes', 'on'].includes(t)) return 'true';
+-+    if (['false', '0', 'no', 'off', ''].includes(t)) return 'false';
+-+    return 'false'; // unrecognised → safest default (do NOT auto-send)
+-+  }, z.enum(['true', 'false']).optional()), // email statements automatically from the monthly cron
+- 
+-   // Email
+-   RESEND_API_KEY: z.string().min(1),
+--- 
+-2.43.0
+-
+diff --git a/lib/bulk-upload.ts b/lib/bulk-upload.ts
+new file mode 100644
+index 0000000..6e98efe
+--- /dev/null
++++ b/lib/bulk-upload.ts
+@@ -0,0 +1,137 @@
++// lib/bulk-upload.ts
++//
++// Shared (client + server) rules for staff BULK uploads to a memorial's
++// Collection. Pure functions only — no Node APIs, no DB — so the browser can
++// pre-check a drop of 300 files with exactly the same logic the server
++// re-runs, and so it is cheap to unit-test.
++//
++// The per-memorial storage cap itself (5GB) lives in lib/storage-quota.ts and
++// is the single source of truth; this file only receives "remainingBytes".
++//
++// Per-file limits deliberately match the existing single-file routes
++// (50MB photos/docs like api/memorial/[id]/collection, 200MB video like
++// api/memorial/[id]/video/upload) so bulk upload is not a way around them.
++
++export type BulkItemType = 'PHOTO' | 'VIDEO' | 'DOCUMENT';
++
++export const BULK_LIMITS = {
++  /** Files per prepare/complete round trip. Larger drops are done in runs. */
++  maxFilesPerBatch: 100,
++  maxFileNameLength: 255,
++  maxBytes: {
++    PHOTO:    50 * 1024 * 1024,
++    DOCUMENT: 50 * 1024 * 1024,
++    VIDEO:   200 * 1024 * 1024,
++  } as Record<BulkItemType, number>,
++} as const;
++
++/** Same allow-lists as the single-file staff route. */
++const MIME_BY_TYPE: Record<BulkItemType, string[]> = {
++  PHOTO:    ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
++  VIDEO:    ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'],
++  DOCUMENT: ['application/pdf', 'application/msword',
++             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
++};
++
++/** Browsers often send '' (HEIC especially) or application/octet-stream. */
++const MIME_BY_EXT: Record<string, string> = {
++  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
++  heic: 'image/heic', heif: 'image/heif',
++  mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', webm: 'video/webm',
++  pdf: 'application/pdf', doc: 'application/msword',
++  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
++};
++
++export const BULK_ACCEPT_ATTR = Object.keys(MIME_BY_EXT).map((e) => `.${e}`).join(',');
++
++export function extensionOf(name: string): string {
++  const m = /\.([A-Za-z0-9]{1,6})$/.exec(name.trim());
++  return m ? m[1].toLowerCase() : '';
++}
++
++/** The declared type if it is one we accept, else a guess from the extension. */
++export function resolveMimeType(name: string, declared: string): string {
++  const d = (declared || '').toLowerCase();
++  if (Object.values(MIME_BY_TYPE).some((list) => list.includes(d))) return d;
++  return MIME_BY_EXT[extensionOf(name)] ?? '';
++}
++
++export function typeForMime(mime: string): BulkItemType | null {
++  for (const t of Object.keys(MIME_BY_TYPE) as BulkItemType[]) {
++    if (MIME_BY_TYPE[t].includes(mime)) return t;
++  }
++  return null;
++}
++
++export interface BulkFileInput { name: string; type: string; size: number }
++
++export interface BulkAccepted {
++  index:    number;
++  name:     string;
++  mimeType: string;
++  type:     BulkItemType;
++  size:     number;
++}
++export interface BulkRejected { index: number; name: string; reason: string }
++
++export function formatBytes(n: number): string {
++  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
++  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
++  if (n >= 1024)      return `${Math.round(n / 1024)} KB`;
++  return `${n} B`;
++}
++
++/**
++ * Decide which files of a drop can be uploaded.
++ *
++ * Files are considered IN ORDER. Each must be a supported type, within its
++ * per-file limit, and must still fit in `remainingBytes` after the files
++ * accepted before it — so a drop that is too big for the memorial's 5GB cap
++ * uploads as many files as fit (in the order given) and clearly rejects the
++ * rest, rather than failing the whole batch or going over.
++ */
++export function planBulkBatch(
++  files: BulkFileInput[],
++  remainingBytes: number,
++): { accepted: BulkAccepted[]; rejected: BulkRejected[]; acceptedBytes: number } {
++  const accepted: BulkAccepted[] = [];
++  const rejected: BulkRejected[] = [];
++  let acceptedBytes = 0;
++
++  files.forEach((f, index) => {
++    const name = typeof f?.name === 'string' ? f.name : '';
++    const reject = (reason: string) => rejected.push({ index, name: name || `file ${index + 1}`, reason });
++
++    if (!name.trim() || name.length > BULK_LIMITS.maxFileNameLength) return reject('Invalid file name');
++    if (!Number.isInteger(f.size) || f.size <= 0) return reject('File is empty');
++
++    const mimeType = resolveMimeType(name, typeof f.type === 'string' ? f.type : '');
++    const type = typeForMime(mimeType);
++    if (!type) return reject('Unsupported file type');
++
++    const max = BULK_LIMITS.maxBytes[type];
++    if (f.size > max) return reject(`Too large (max ${formatBytes(max)} for ${type.toLowerCase()}s)`);
++
++    if (acceptedBytes + f.size > remainingBytes) {
++      return reject("Would exceed this memorial's storage limit");
++    }
++
++    acceptedBytes += f.size;
++    accepted.push({ index, name, mimeType, type, size: f.size });
++  });
++
++  return { accepted, rejected, acceptedBytes };
++}
++
++/** Keys the server hands out look like collection/<memorialId>/<uuid>.<ext>. */
++export function isBulkKeyForMemorial(key: unknown, memorialId: string): key is string {
++  if (typeof key !== 'string') return false;
++  const safeId = memorialId.replace(/[^A-Za-z0-9_-]/g, '');
++  if (safeId !== memorialId) return false;
++  return new RegExp(`^collection/${safeId}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.[a-z0-9]{1,6}$`).test(key);
++}
++
++/** "IMG_4821.JPG" -> "IMG_4821" (used as the item's default title). */
++export function titleFromFileName(name: string): string {
++  return name.replace(/\.[A-Za-z0-9]{1,6}$/, '').trim().slice(0, 120) || name.slice(0, 120);
++}
+diff --git a/lib/edgeAuth.ts b/lib/edgeAuth.ts
+index 5cb6018..51fb332 100644
+--- a/lib/edgeAuth.ts
++++ b/lib/edgeAuth.ts
+@@ -18,8 +18,8 @@
+ //     directory and FAILS THE BUILD for any unclassified route, so it can't be
+ //     forgotten silently. It also means odd paths ("/%64ashboard", "//dashboard")
+ //     that dodge a prefix match are protected rather than waved through.
+-//   · Three modes (EDGE_AUTH_MODE): off | log | enforce. Default is `log`,
+-//     which blocks nothing and just reports what WOULD be blocked, so this can
++//   · Three modes (EDGE_AUTH_MODE): off | log | enforce. Default is `enforce` in
++//     production and `log` elsewhere; `log` blocks nothing and just reports what WOULD be blocked, so this can
+ //     be deployed with zero risk of locking anyone out, then switched to
+ //     enforce once the logs are clean.
+ 
+@@ -90,7 +90,10 @@ export function classifyPath(pathname: string): PathClass {
+ export function parseEdgeAuthMode(raw: string | undefined | null): EdgeAuthMode {
+   const v = (raw ?? '').trim().toLowerCase();
+   if (v === 'off' || v === 'enforce' || v === 'log') return v;
+-  return 'log';
++  // Unset/unrecognised: fail CLOSED in production, stay permissive in dev/test.
++  // (This used to be 'log' everywhere, i.e. edge protection silently did
++  // nothing on a production deploy that forgot to set the variable.)
++  return process.env.NODE_ENV === 'production' ? 'enforce' : 'log';
+ }
+ 
+ export function edgeDecision(pathname: string, mode: EdgeAuthMode, signedIn: boolean): EdgeDecision {
+diff --git a/lib/env.ts b/lib/env.ts
+index d84c762..8bc25c3 100644
+--- a/lib/env.ts
++++ b/lib/env.ts
+@@ -117,6 +117,12 @@ const EnvSchema = z.object({
+     message: 'NEXT_PUBLIC_APP_URL is set to localhost in production — set it to your real deployed URL (e.g. https://your-domain.vercel.app) in Vercel\'s Production environment variables',
+     path: ['NEXT_PUBLIC_APP_URL'],
+   },
++).refine(
++  (env) => env.NODE_ENV !== 'production' || (!!env.IP_HASH_SALT && env.IP_HASH_SALT.length >= 16),
++  {
++    message: 'IP_HASH_SALT must be set (16+ random characters) when NODE_ENV=production — it salts the hashed client IPs used for rate limiting. Generate one with: openssl rand -hex 24',
++    path: ['IP_HASH_SALT'],
++  },
+ );
+ 
+ export type Env = z.infer<typeof EnvSchema>;
+diff --git a/lib/ipSalt.ts b/lib/ipSalt.ts
+new file mode 100644
+index 0000000..f539d2f
+--- /dev/null
++++ b/lib/ipSalt.ts
+@@ -0,0 +1,16 @@
++// lib/ipSalt.ts
++//
++// Single source for the salt used when hashing client IPs (rate limiting,
++// guest-book abuse tracking). There is deliberately NO hardcoded fallback in
++// production: a salt that is visible in source lets anyone with the repo
++// pre-compute a reverse lookup of the stored hashes. lib/env.ts refuses to
++// boot in production without IP_HASH_SALT; this is the second line of defence.
++
++export function getIpHashSalt(): string {
++  const salt = process.env.IP_HASH_SALT;
++  if (salt) return salt;
++  if (process.env.NODE_ENV === 'production') {
++    throw new Error('IP_HASH_SALT is not set (required in production)');
++  }
++  return 'dev-only-ip-salt';
++}
+diff --git a/lib/memorial/createMemorial.ts b/lib/memorial/createMemorial.ts
+index 423c119..53c2b68 100644
+--- a/lib/memorial/createMemorial.ts
++++ b/lib/memorial/createMemorial.ts
+@@ -19,7 +19,22 @@ import { checkAccountActive } from '@/lib/entitlement';
+ // See lib/billing/usage.ts.
+ import { recordUsage } from '@/lib/billing/usage';
+ import { generateUniqueSlug } from '@/lib/memorial/slug';
++import { generatePublicToken } from '@/lib/qr';
+ import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
++import { validateMemorialInput } from '@/lib/memorial/validateInput';
++
++/**
++ * Max memorials a site can create while its FREE TRIAL is running. Trial
++ * memorials are billed at $0, so without a cap a throwaway sign-up could mint
++ * unlimited free memorials (and storage). Paying sites (no trial / trial over)
++ * are never capped. Override with TRIAL_MEMORIAL_LIMIT; 0 disables the cap.
++ */
++function getTrialMemorialLimit(): number {
++  const raw = process.env.TRIAL_MEMORIAL_LIMIT;
++  if (raw === undefined || raw.trim() === '') return 10;
++  const n = Number(raw);
++  return Number.isInteger(n) && n >= 0 ? n : 10;
++}
+ 
+ export interface CreateMemorialInput {
+   ownerId:              string;   // Clerk userId — attributed creator
+@@ -44,6 +59,14 @@ export interface CreateMemorialInput {
+   isMaori?:                 boolean;
+   nominatedEmail?: string;
+   sendAfterDays?:  number;
++  /**
++   * If set, an identical-looking memorial (same owner + org + name) created
++   * within this many ms is returned instead of creating a second one — so a
++   * double-click or network retry can't create (and bill) two. The manual
++   * form opts in; CSV import does NOT (a CSV can legitimately hold two
++   * people with the same name).
++   */
++  dedupeWindowMs?: number;
+ }
+ 
+ export type CreateMemorialResult =
+@@ -51,21 +74,59 @@ export type CreateMemorialResult =
+   // 'plan_limit' is now only returned for a SUSPENDED account (kept as the
+   // kind name so existing callers — app/api/memorial/route.ts and the CSV
+   // import — keep working unchanged).
+-  | { ok: false; kind: 'validation' | 'plan_limit' | 'server_error'; error: string };
++  | { ok: false; kind: 'validation' | 'plan_limit' | 'server_error'; error: string; code?: string };
+ 
+ export async function createMemorial(input: CreateMemorialInput): Promise<CreateMemorialResult> {
++  const invalid = validateMemorialInput(input as unknown as Record<string, unknown>);
++  if (invalid) return { ok: false, kind: 'validation', error: invalid };
++
+   const firstName = input.firstName.trim();
+   const lastName  = input.lastName.trim();
+ 
+-  if (!firstName) return { ok: false, kind: 'validation', error: 'firstName is required' };
+-  if (!lastName)  return { ok: false, kind: 'validation', error: 'lastName is required' };
+-
+-  // No quantity cap — every memorial is recorded in the usage ledger and
+-  // billed on the site's monthly statement. This only blocks a SUSPENDED
+-  // account.
++  // No quantity cap for paying sites — every memorial is recorded in the
++  // usage ledger and billed on the site's monthly statement. This blocks a
++  // SUSPENDED account, and caps a site that is still inside its free trial.
+   const entitlement = await checkAccountActive(input.organisationId);
+   if (!entitlement.allowed) {
+-    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Account suspended' };
++    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Account suspended', code: 'ACCOUNT_SUSPENDED' };
++  }
++
++  const trialLimit = getTrialMemorialLimit();
++  if (trialLimit > 0) {
++    const org = await prisma.organisation.findUnique({
++      where:  { id: input.organisationId },
++      select: { trialEndsAt: true },
++    });
++    if (org?.trialEndsAt && org.trialEndsAt.getTime() > Date.now()) {
++      const existing = await prisma.memorial.count({ where: { organisationId: input.organisationId } });
++      if (existing >= trialLimit) {
++        return {
++          ok: false, kind: 'plan_limit', code: 'TRIAL_LIMIT_REACHED',
++          error: `Your free trial includes up to ${trialLimit} memorials. Please contact support to continue.`,
++        };
++      }
++    }
++  }
++
++  if (input.dedupeWindowMs && input.dedupeWindowMs > 0) {
++    const dup = await prisma.memorial.findFirst({
++      where: {
++        ownerId: input.ownerId, organisationId: input.organisationId,
++        firstName, lastName,
++        createdAt: { gte: new Date(Date.now() - input.dedupeWindowMs) },
++      },
++      orderBy: { createdAt: 'desc' },
++      select: { id: true, title: true, slug: true, qrTokenHash: true, uploadLinkToken: true, workflowStage: true },
++    });
++    if (dup && dup.slug && dup.uploadLinkToken) {
++      return {
++        ok: true,
++        memorial: {
++          id: dup.id, title: dup.title, slug: dup.slug, qrTokenHash: dup.qrTokenHash,
++          uploadLinkToken: dup.uploadLinkToken, workflowStage: dup.workflowStage,
++        },
++      };
++    }
+   }
+ 
+   const title = `${firstName} ${lastName}`;
+@@ -113,6 +174,10 @@ export async function createMemorial(input: CreateMemorialInput): Promise<Create
+           qrTokenHash,
+           uploadLinkToken,
+           uploadLinkEnabled:      true,
++          // Issued at creation so the public link (/v/{slug}?key={publicToken})
++          // exists from the first moment. Previously generated lazily on first
++          // QR-panel open, leaving new memorials with no public URL.
++          publicToken:            generatePublicToken(),
+           workflowStage:          'COLLECTING',
+         },
+       });
+diff --git a/lib/memorial/validateInput.ts b/lib/memorial/validateInput.ts
+new file mode 100644
+index 0000000..d015e3c
+--- /dev/null
++++ b/lib/memorial/validateInput.ts
+@@ -0,0 +1,112 @@
++// lib/memorial/validateInput.ts
++//
++// Pure input validation for memorial creation (no DB, no env) so it is cheap
++// to unit-test and shared by every entry point (manual form, CSV import).
++//
++// Before this existed, createMemorial() trusted the request body: unbounded
++// string lengths, `new Date('garbage')` becoming an Invalid Date that Prisma
++// rejected as a 500, and familyContactEmail accepted verbatim even though it
++// becomes a handover recipient. Returns a human-readable message on the first
++// problem, or null when the input is acceptable.
++
++export const LIMITS = {
++  name:         100,
++  preferred:    100,
++  place:        200,
++  venueName:    200,
++  venueAddress: 300,
++  contactName:  100,
++  email:        254,
++  phone:        40,
++  serviceType:  50,
++  maxSendAfterDays: 3650,
++} as const;
++
++const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
++
++export function isValidEmail(v: string): boolean {
++  return v.length <= LIMITS.email && EMAIL_RE.test(v);
++}
++
++type Maybe = unknown;
++
++function str(v: Maybe, field: string, max: number): string | null {
++  if (v === undefined || v === null || v === '') return null;
++  if (typeof v !== 'string') return `${field} must be text`;
++  if (v.trim().length > max) return `${field} must be ${max} characters or fewer`;
++  return null;
++}
++
++function parseDate(v: Maybe, field: string): { err: string | null; date: Date | null } {
++  if (v === undefined || v === null || v === '') return { err: null, date: null };
++  if (typeof v !== 'string') return { err: `${field} must be a date`, date: null };
++  const d = new Date(v);
++  if (Number.isNaN(d.getTime())) return { err: `${field} is not a valid date`, date: null };
++  return { err: null, date: d };
++}
++
++const DAY = 24 * 60 * 60 * 1000;
++
++export function validateMemorialInput(
++  input: Record<string, Maybe>,
++  now: Date = new Date(),
++): string | null {
++  for (const f of ['firstName', 'lastName'] as const) {
++    if (typeof input[f] !== 'string' || !(input[f] as string).trim()) return `${f} is required`;
++    if ((input[f] as string).trim().length > LIMITS.name) return `${f} must be ${LIMITS.name} characters or fewer`;
++  }
++
++  const textChecks: Array<[string, number]> = [
++    ['preferredName',     LIMITS.preferred],
++    ['placeOfPassing',    LIMITS.place],
++    ['venueName',         LIMITS.venueName],
++    ['venueAddress',      LIMITS.venueAddress],
++    ['familyContactName', LIMITS.contactName],
++    ['familyContactPhone', LIMITS.phone],
++    ['serviceType',       LIMITS.serviceType],
++  ];
++  for (const [f, max] of textChecks) {
++    const e = str(input[f], f, max);
++    if (e) return e;
++  }
++
++  for (const f of ['familyContactEmail', 'nominatedEmail'] as const) {
++    const v = input[f];
++    if (v === undefined || v === null || v === '') continue;
++    if (typeof v !== 'string' || !isValidEmail(v.trim())) return `${f} must be a valid email address`;
++  }
++
++  const birth   = parseDate(input.dateOfBirth, 'dateOfBirth');   if (birth.err)   return birth.err;
++  const death   = parseDate(input.dateOfDeath, 'dateOfDeath');   if (death.err)   return death.err;
++  const funeral = parseDate(input.funeralDate, 'funeralDate');   if (funeral.err) return funeral.err;
++  const service = parseDate(input.serviceTime, 'serviceTime');   if (service.err) return service.err;
++
++  const earliest = new Date('1800-01-01').getTime();
++  if (birth.date && (birth.date.getTime() < earliest || birth.date.getTime() > now.getTime() + DAY)) {
++    return 'dateOfBirth is out of range';
++  }
++  if (death.date && (death.date.getTime() < earliest || death.date.getTime() > now.getTime() + DAY)) {
++    return 'dateOfDeath cannot be in the future';
++  }
++  if (birth.date && death.date && birth.date.getTime() > death.date.getTime()) {
++    return 'dateOfBirth must be before dateOfDeath';
++  }
++  const maxFuture = now.getTime() + 2 * 365 * DAY;
++  for (const [d, f] of [[funeral.date, 'funeralDate'], [service.date, 'serviceTime']] as const) {
++    if (d && (d.getTime() < earliest || d.getTime() > maxFuture)) return `${f} is out of range`;
++  }
++
++  if (input.sendAfterDays !== undefined && input.sendAfterDays !== null) {
++    const n = input.sendAfterDays;
++    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > LIMITS.maxSendAfterDays) {
++      return `sendAfterDays must be a whole number between 0 and ${LIMITS.maxSendAfterDays}`;
++    }
++  }
++
++  for (const f of ['isAboriginal', 'isTorresStraitIslander', 'isSouthSeaIslander', 'isMaori'] as const) {
++    const v = input[f];
++    if (v !== undefined && v !== null && typeof v !== 'boolean') return `${f} must be true or false`;
++  }
++
++  return null;
++}
+diff --git a/lib/rateLimit.ts b/lib/rateLimit.ts
+index 9e8a273..5b534cf 100644
+--- a/lib/rateLimit.ts
++++ b/lib/rateLimit.ts
+@@ -29,6 +29,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { prisma } from '@/lib/prisma';
+ import { createHash } from 'crypto';
++import { getIpHashSalt } from '@/lib/ipSalt';
+ 
+ export interface RateLimitOptions {
+   /** Max requests allowed within the window. */
+@@ -46,7 +47,7 @@ export interface RateLimitOptions {
+  */
+ function hashIp(ip: string): string {
+   return createHash('sha256')
+-    .update(ip + (process.env.IP_HASH_SALT ?? 'memoriam-salt'))
++    .update(ip + getIpHashSalt())
+     .digest('hex')
+     .slice(0, 16);
+ }
+diff --git a/lib/storage-s3.ts b/lib/storage-s3.ts
+index 541311f..8965ca2 100644
+--- a/lib/storage-s3.ts
++++ b/lib/storage-s3.ts
+@@ -7,7 +7,7 @@
+  * Replace your existing lib/storage-s3.ts with this file.
+  */
+ 
+-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
++import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+ 
+ let _client: S3Client | null = null;
+@@ -58,3 +58,42 @@ export async function s3SignedUrl(key: string, expiresIn: number): Promise<strin
+     Key:    key,
+   }), { expiresIn });
+ }
++
++
++// ── Direct-to-bucket uploads (staff bulk upload) ────────────────────────────
++// Vercel Functions reject request bodies over ~4.5MB, so large files cannot be
++// proxied through an API route. The browser PUTs straight to the bucket using
++// a short-lived presigned URL instead, and the server verifies the object
++// afterwards (s3Head / s3GetRange) before recording it. Requires a CORS rule
++// on the bucket that allows PUT from the app origin (see docs/BULK_UPLOAD.md).
++
++export async function s3PresignedPut(key: string, contentType: string, expiresIn = 4 * 60 * 60): Promise<string> {
++  return getSignedUrl(client(), new PutObjectCommand({
++    Bucket:      process.env.AWS_S3_BUCKET!,
++    Key:         key,
++    ContentType: contentType,
++  }), { expiresIn });
++}
++
++/** Object size/type, or null if it does not exist. */
++export async function s3Head(key: string): Promise<{ size: number; contentType: string | undefined } | null> {
++  try {
++    const r = await client().send(new HeadObjectCommand({ Bucket: process.env.AWS_S3_BUCKET!, Key: key }));
++    return { size: r.ContentLength ?? 0, contentType: r.ContentType };
++  } catch (err: any) {
++    if (err?.name === 'NotFound' || err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return null;
++    throw err;
++  }
++}
++
++/** First `bytes` bytes of an object (for magic-byte checks). */
++export async function s3GetRange(key: string, bytes: number): Promise<Buffer> {
++  const r = await client().send(new GetObjectCommand({
++    Bucket: process.env.AWS_S3_BUCKET!,
++    Key:    key,
++    Range:  `bytes=0-${Math.max(0, bytes - 1)}`,
++  }));
++  const body = r.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
++  if (!body?.transformToByteArray) throw new Error('Unexpected storage response body');
++  return Buffer.from(await body.transformToByteArray());
++}
+diff --git a/lib/tenant.ts b/lib/tenant.ts
+index 2a71d7f..6e5fd8c 100644
+--- a/lib/tenant.ts
++++ b/lib/tenant.ts
+@@ -4,13 +4,16 @@
+  * Resolves the Organisation for the current authenticated user.
+  * Every API route that needs org context calls getOrgForUser().
+  *
+- * Solo users (not part of a Clerk Org) get a personal Organisation
+- * created automatically on first call — transparent to them.
++ * A user with NO org membership is NOT given an org here any more. Orgs are
++ * created only by POST /api/onboarding/create-org, after the user has accepted
++ * the Terms. Previously this file auto-created a "My Funeral Home" org on first
++ * call, which let a freshly signed-up user skip /onboarding entirely (and the
++ * terms acceptance) by calling any org-scoped API directly.
+  */
+ 
+ import { prisma }  from '@/lib/prisma';
+ import type { Organisation, OrgRole } from '@prisma/client';
+-import { computeTrialEndsAt } from '@/lib/billing/trial';
++import { NextResponse } from 'next/server';
+ 
+ // ── Types ────────────────────────────────────────────────────────────────────
+ 
+@@ -35,33 +38,45 @@ export {
+ } from '@/lib/auth/getOrgForUser';
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
++export const ONBOARDING_REQUIRED = 'ONBOARDING_REQUIRED';
++
++/**
++ * Thrown when a signed-in user has no organisation yet. Carries status 403 so
++ * generic handlers (handleAuthError) answer correctly; routes that have their
++ * own catch should call orgErrorResponse(err) first.
++ */
++export function onboardingRequiredError(): Error {
++  return Object.assign(
++    new Error('Please finish setting up your organisation before continuing.'),
++    { status: 403, code: ONBOARDING_REQUIRED },
++  );
++}
++
++/** 403 JSON response if `err` is the onboarding-required error, otherwise null. */
++export function orgErrorResponse(err: unknown): NextResponse | null {
++  if (err && typeof err === 'object' && (err as { code?: unknown }).code === ONBOARDING_REQUIRED) {
++    return NextResponse.json(
++      {
++        success: false,
++        error: 'Please finish setting up your organisation before continuing.',
++        code: ONBOARDING_REQUIRED,
++      },
++      { status: 403 },
++    );
++  }
++  return null;
++}
++
+ export async function getOrgForUser(userId: string): Promise<OrgWithRole> {
+-  // Check existing membership
+   const membership = await prisma.orgMember.findFirst({
+     where:   { userId },
+     include: { organisation: true },
+     orderBy: { createdAt: 'asc' },
+   });
+ 
+-  if (membership) {
+-    return { ...membership.organisation, role: membership.role };
+-  }
++  if (!membership) throw onboardingRequiredError();
+ 
+-  // First sign-in: create a personal org and make them OWNER
+-  const org = await prisma.organisation.create({
+-    data: {
+-      clerkOrgId: `personal_${userId}`,
+-      name:       'My Funeral Home',
+-      slug:       `user-${userId.slice(-8).toLowerCase()}`,
+-      plan:       'STARTER',
+-      trialEndsAt: await computeTrialEndsAt(),
+-      members: {
+-        create: { userId, role: 'OWNER' },
+-      },
+-    },
+-  });
+-
+-  return { ...org, role: 'OWNER' as OrgRole };
++  return { ...membership.organisation, role: membership.role };
+ }
+ 
+ /**
+@@ -106,7 +121,13 @@ export async function assertMemorialAccess(
+   memorialId: string,
+   userId:     string
+ ): Promise<{ id: string; organisationId: string | null } | null> {
+-  const orgId = await getOrgIdForUser(userId);
++  let orgId: string;
++  try {
++    orgId = await getOrgIdForUser(userId);
++  } catch (err) {
++    if (orgErrorResponse(err)) return null; // no org yet → no access
++    throw err;
++  }
+ 
+   const memorial = await prisma.memorial.findUnique({
+     where: { id: memorialId },
+diff --git a/month-end-nudge.patch b/month-end-nudge.patch
+deleted file mode 100644
+index ecdaa10..0000000
+--- a/month-end-nudge.patch
++++ /dev/null
+@@ -1,382 +0,0 @@
+-From 77b701be0a5eca79253c37c51bbfd3ddc72a84bf Mon Sep 17 00:00:00 2001
+-From: Claude <noreply@anthropic.com>
+-Date: Wed, 14 Oct 2026 06:35:49 +0000
+-Subject: [PATCH] Month-end billing nudge: owner banner, 'bills ready' email,
+- send-all
+-
+----
+- app/api/cron/billing/route.ts                 | 16 ++++++-
+- .../billing/statements/send-all/route.ts      | 29 ++++++++++++
+- app/dashboard/layout.tsx                      | 14 ++++++
+- app/dashboard/system/billing/page.tsx         | 25 ++++++++++
+- components/dashboard/BillingReviewBanner.tsx  | 46 +++++++++++++++++++
+- lib/auth/platformAdmin.ts                     |  4 ++
+- lib/billing/adminNotify.ts                    | 44 ++++++++++++++++++
+- lib/billing/adminSummary.ts                   | 43 +++++++++++++++++
+- lib/billing/statements.ts                     | 17 +++++++
+- 9 files changed, 236 insertions(+), 2 deletions(-)
+- create mode 100644 app/api/system/billing/statements/send-all/route.ts
+- create mode 100644 components/dashboard/BillingReviewBanner.tsx
+- create mode 100644 lib/billing/adminNotify.ts
+- create mode 100644 lib/billing/adminSummary.ts
+-
+-diff --git a/app/api/cron/billing/route.ts b/app/api/cron/billing/route.ts
+-index 70a0589..c41f6fa 100644
+---- a/app/api/cron/billing/route.ts
+-+++ b/app/api/cron/billing/route.ts
+-@@ -5,7 +5,8 @@
+-  * statements for the month that just ended, for every site. By default it
+-  * does NOT email them — review at /dashboard/system/billing and send when
+-  * happy. Set BILLING_AUTO_SEND=true to email each new statement straight
+-- * away instead.
+-+ * away instead. Either way the owner gets a "bills are ready" email, and a
+-+ * banner shows on the dashboard until every draft is sent.
+-  *
+-  * Replaces /api/cron/reset-usage: there are no monthly counters to reset
+-  * any more, the usage ledger is the source of truth.
+-@@ -18,6 +19,8 @@ import { NextRequest, NextResponse } from 'next/server';
+- import { isValidCronSecret } from '@/lib/timingSafe';
+- import { generateAllStatements, sendStatement } from '@/lib/billing/statements';
+- import { periodKeyFor, previousPeriodKey } from '@/lib/billing/period';
+-+import { getReviewSummary } from '@/lib/billing/adminSummary';
+-+import { notifyAdminBillsReady } from '@/lib/billing/adminNotify';
+- 
+- export async function GET(req: NextRequest) {
+-   const authHeader = req.headers.get('authorization');
+-@@ -43,12 +46,21 @@ export async function GET(req: NextRequest) {
+-       }
+-     }
+- 
+-+    // Heads-up email to the owner: drafts still waiting for review (all of
+-+    // them, if auto-send is off). A failed email never fails the run.
+-+    let notified = 0;
+-+    try {
+-+      notified = (await notifyAdminBillsReady(await getReviewSummary())).sent;
+-+    } catch (err) {
+-+      console.error('[cron/billing] admin notification failed:', err);
+-+    }
+-+
+-     const count = (o: string) => results.filter((r) => r.outcome === o).length;
+-     console.log(`[cron/billing] ${period}: created=${count('created')} regenerated=${count('regenerated')} skipped=${count('skipped')} errors=${count('error')} sent=${sent}`);
+-     return NextResponse.json({
+-       success: true, period,
+-       created: count('created'), regenerated: count('regenerated'), skipped: count('skipped'),
+--      errors: count('error'), sent, sendFailed,
+-+      errors: count('error'), sent, sendFailed, notified,
+-     });
+-   } catch (error) {
+-     console.error('[cron/billing]', error);
+-diff --git a/app/api/system/billing/statements/send-all/route.ts b/app/api/system/billing/statements/send-all/route.ts
+-new file mode 100644
+-index 0000000..b15c88f
+---- /dev/null
+-+++ b/app/api/system/billing/statements/send-all/route.ts
+-@@ -0,0 +1,29 @@
+-+/**
+-+ * POST /api/system/billing/statements/send-all   (platform admin only)
+-+ * Body: { period: 'YYYY-MM' }
+-+ *
+-+ * Emails every DRAFT statement for the month in one go. Statements that
+-+ * fail (no recipient, email error) stay DRAFT and are listed in the
+-+ * response so they can be fixed and retried — re-running only touches
+-+ * the remaining drafts, never re-sends ones already SENT.
+-+ */
+-+
+-+import { NextRequest, NextResponse } from 'next/server';
+-+import { withPlatformAdmin } from '@/lib/billing/routeHelpers';
+-+import { isValidPeriodKey } from '@/lib/billing/period';
+-+import { sendAllDrafts } from '@/lib/billing/statements';
+-+
+-+export async function POST(req: NextRequest) {
+-+  return withPlatformAdmin('POST /api/system/billing/statements/send-all', async () => {
+-+    const body = (await req.json().catch(() => ({}))) as { period?: unknown };
+-+    if (!isValidPeriodKey(body.period)) {
+-+      return NextResponse.json({ success: false, error: 'period must be YYYY-MM, e.g. 2026-09' }, { status: 400 });
+-+    }
+-+    const rows = await sendAllDrafts(body.period);
+-+    const failed = rows.filter((r) => !r.ok);
+-+    return NextResponse.json({
+-+      success: true,
+-+      data: { sent: rows.length - failed.length, failed: failed.length, failures: failed },
+-+    });
+-+  });
+-+}
+-diff --git a/app/dashboard/layout.tsx b/app/dashboard/layout.tsx
+-index 01f5393..4f4d24d 100644
+---- a/app/dashboard/layout.tsx
+-+++ b/app/dashboard/layout.tsx
+-@@ -40,6 +40,8 @@ import { auth }              from '@clerk/nextjs/server';
+- import { redirect }          from 'next/navigation';
+- import Link                  from 'next/link';
+- import { getOrgContextForUser } from '@/lib/auth/getOrgForUser';
+-+import { isPlatformAdmin } from '@/lib/auth/platformAdmin';
+-+import { BillingReviewBanner } from '@/components/dashboard/BillingReviewBanner';
+- 
+- export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+-   const { userId } = await auth();
+-@@ -140,6 +142,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
+-             Billing
+-           </Link>
+- 
+-+          {isPlatformAdmin(userId) && (
+-+            <Link href="/dashboard/system/billing" className="sidebar-nav-item">
+-+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+-+                <line x1="12" y1="1" x2="12" y2="23"/>
+-+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+-+              </svg>
+-+              Billing (all sites)
+-+            </Link>
+-+          )}
+-+
+-           {/* ── Support ── */}
+-           <span className="sidebar-section-label" style={{ marginTop: '0.75rem' }}>Support</span>
+- 
+-@@ -167,6 +179,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
+- 
+-       {/* ── Main content ─────────────────────────────────────────────── */}
+-       <div className="dash-content">
+-+        {/* Platform owner only: nudge when bills are ready to review/send */}
+-+        {isPlatformAdmin(userId) && <BillingReviewBanner />}
+-         {children}
+-       </div>
+- 
+-diff --git a/app/dashboard/system/billing/page.tsx b/app/dashboard/system/billing/page.tsx
+-index b4f7ddc..7764572 100644
+---- a/app/dashboard/system/billing/page.tsx
+-+++ b/app/dashboard/system/billing/page.tsx
+-@@ -86,6 +86,26 @@ export default function SystemBillingPage() {
+-     setEditing(null);
+-   }
+- 
+-+  const drafts = (sites ?? []).filter((s) => s.statement?.status === 'DRAFT');
+-+  const draftTotal = drafts.reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
+-+
+-+  async function sendAll() {
+-+    if (!window.confirm(`Email ${drafts.length} bill${drafts.length === 1 ? '' : 's'} totalling ${money(draftTotal)} to the sites now?`)) return;
+-+    setBusy('sendall'); setMsg(null);
+-+    try {
+-+      const r = await fetch('/api/system/billing/statements/send-all', {
+-+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period }),
+-+      }).then((x) => x.json());
+-+      if (!r.success) setMsg({ ok: false, text: r.error ?? 'Failed' });
+-+      else if (r.data.failed > 0) {
+-+        const names = r.data.failures.map((f: { number: string; error?: string }) => `${f.number}: ${f.error}`).join(' | ');
+-+        setMsg({ ok: false, text: `Sent ${r.data.sent}, but ${r.data.failed} failed and stay as drafts — ${names}` });
+-+      } else setMsg({ ok: true, text: `Sent ${r.data.sent} bill${r.data.sent === 1 ? '' : 's'}` });
+-+      load();
+-+    } catch { setMsg({ ok: false, text: 'Request failed' }); }
+-+    finally { setBusy(null); }
+-+  }
+-+
+-   const total = (sites ?? []).reduce((n, s) => n + (s.statement?.totalCents ?? 0), 0);
+- 
+-   return (
+-@@ -96,6 +116,11 @@ export default function SystemBillingPage() {
+-         <button style={st.primary} disabled={busy === 'all'} onClick={() => generate()}>
+-           {busy === 'all' ? 'Generating…' : 'Generate drafts for all sites'}
+-         </button>
+-+        {drafts.length > 0 && (
+-+          <button style={{ ...st.primary, background: '#15803d' }} disabled={busy === 'sendall'} onClick={sendAll}>
+-+            {busy === 'sendall' ? 'Sending…' : `Send all ${drafts.length} drafts (${money(draftTotal)})`}
+-+          </button>
+-+        )}
+-         <span style={st.muted}>Statements this month: {money(total)}</span>
+-       </div>
+-       {msg && <div style={{ ...st.msg, background: msg.ok ? '#dcfce7' : '#fee2e2', color: msg.ok ? '#166534' : '#991b1b' }}>{msg.text}</div>}
+-diff --git a/components/dashboard/BillingReviewBanner.tsx b/components/dashboard/BillingReviewBanner.tsx
+-new file mode 100644
+-index 0000000..27f19da
+---- /dev/null
+-+++ b/components/dashboard/BillingReviewBanner.tsx
+-@@ -0,0 +1,46 @@
+-+// components/dashboard/BillingReviewBanner.tsx
+-+//
+-+// Server component, rendered by app/dashboard/layout.tsx for PLATFORM
+-+// ADMINS ONLY. Shows when last month's bills are drafted and waiting, or
+-+// when sent bills are overdue. It needs no dismiss button: it vanishes on
+-+// its own once every draft has been sent.
+-+
+-+import Link from 'next/link';
+-+import { getReviewSummary } from '@/lib/billing/adminSummary';
+-+import { formatMoney } from '@/lib/billing/pricing';
+-+
+-+export async function BillingReviewBanner() {
+-+  let s;
+-+  try { s = await getReviewSummary(); }
+-+  catch (err) { console.error('[BillingReviewBanner]', err); return null; } // never break the dashboard over a banner
+-+
+-+  if (s.draftCount === 0 && s.overdueCount === 0) return null;
+-+
+-+  return (
+-+    <div style={{
+-+      margin: '1rem 2.5rem 0', maxWidth: 900,
+-+      background: 'rgba(201,169,110,0.10)', border: '1px solid rgba(201,169,110,0.45)',
+-+      borderRadius: 10, padding: '1rem 1.4rem',
+-+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+-+    }}>
+-+      <div>
+-+        {s.draftCount > 0 && (
+-+          <p style={{ margin: 0, fontSize: '0.9rem', color: '#f4f1ea' }}>
+-+            <strong>{s.periodLabel} bills are ready:</strong> {s.draftCount} statement{s.draftCount === 1 ? '' : 's'} · {formatMoney(s.draftCents)}. Not sent yet.
+-+          </p>
+-+        )}
+-+        {s.overdueCount > 0 && (
+-+          <p style={{ margin: s.draftCount > 0 ? '0.3rem 0 0' : 0, fontSize: '0.8rem', color: '#e8c17a' }}>
+-+            {s.overdueCount} sent statement{s.overdueCount === 1 ? ' is' : 's are'} overdue ({formatMoney(s.overdueCents)}).
+-+          </p>
+-+        )}
+-+      </div>
+-+      <Link href="/dashboard/system/billing" style={{
+-+        padding: '0.55rem 1.1rem', borderRadius: 6, whiteSpace: 'nowrap', textDecoration: 'none', fontSize: '0.8rem',
+-+        background: 'rgba(201,169,110,0.2)', border: '1px solid rgba(201,169,110,0.5)', color: '#cdba93',
+-+      }}>
+-+        Review &amp; send
+-+      </Link>
+-+    </div>
+-+  );
+-+}
+-diff --git a/lib/auth/platformAdmin.ts b/lib/auth/platformAdmin.ts
+-index da998de..639525c 100644
+---- a/lib/auth/platformAdmin.ts
+-+++ b/lib/auth/platformAdmin.ts
+-@@ -17,6 +17,10 @@ const PLATFORM_ADMIN_IDS = (process.env.PLATFORM_ADMIN_USER_IDS ?? '')
+-   .map((id) => id.trim())
+-   .filter(Boolean);
+- 
+-+export function getPlatformAdminIds(): string[] {
+-+  return [...PLATFORM_ADMIN_IDS];
+-+}
+-+
+- export function isPlatformAdmin(userId: string | null | undefined): boolean {
+-   if (!userId) return false;
+-   return PLATFORM_ADMIN_IDS.includes(userId);
+-diff --git a/lib/billing/adminNotify.ts b/lib/billing/adminNotify.ts
+-new file mode 100644
+-index 0000000..be07da0
+---- /dev/null
+-+++ b/lib/billing/adminNotify.ts
+-@@ -0,0 +1,44 @@
+-+// lib/billing/adminNotify.ts
+-+//
+-+// The monthly "your bills are ready" email to the platform owner(s).
+-+// Sent by /api/cron/billing after drafts are generated, so the 1st of the
+-+// month brings the reminder to you rather than relying on you remembering.
+-+
+-+import { clerkClient } from '@clerk/nextjs/server';
+-+import { sendEmail, getAppUrl } from '@/lib/email';
+-+import { escapeHtml } from '@/lib/htmlEscape';
+-+import { getPlatformAdminIds } from '@/lib/auth/platformAdmin';
+-+import { formatMoney } from '@/lib/billing/pricing';
+-+import type { ReviewSummary } from '@/lib/billing/adminSummary';
+-+
+-+export async function notifyAdminBillsReady(s: ReviewSummary): Promise<{ sent: number }> {
+-+  if (s.draftCount === 0) return { sent: 0 };
+-+
+-+  const url = `${getAppUrl()}/dashboard/system/billing`;
+-+  const subject = `${s.periodLabel} bills are ready to review (${s.draftCount} · ${formatMoney(s.draftCents)})`;
+-+  const html = `<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;padding:32px;color:#1a1714;">
+-+    <h2 style="margin:0 0 12px;">${escapeHtml(s.periodLabel)} bills are ready</h2>
+-+    <p style="font-size:15px;line-height:1.6;color:#4a4540;">
+-+      <strong>${s.draftCount}</strong> statement${s.draftCount === 1 ? '' : 's'} totalling
+-+      <strong>${escapeHtml(formatMoney(s.draftCents))}</strong> have been drafted from last month's usage.
+-+      Nothing has been sent to any site yet.
+-+    </p>
+-+    ${s.overdueCount > 0 ? `<p style="font-size:14px;color:#92400e;">${s.overdueCount} earlier statement${s.overdueCount === 1 ? ' is' : 's are'} overdue (${escapeHtml(formatMoney(s.overdueCents))}).</p>` : ''}
+-+    <p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 22px;background:#1a1714;color:#fff;border-radius:6px;text-decoration:none;">Review &amp; send bills</a></p>
+-+  </div>`;
+-+
+-+  const clerk = await clerkClient();
+-+  let sent = 0;
+-+  for (const id of getPlatformAdminIds()) {
+-+    try {
+-+      const u = await clerk.users.getUser(id);
+-+      const to = (u.emailAddresses.find((e) => e.id === u.primaryEmailAddressId) ?? u.emailAddresses[0])?.emailAddress;
+-+      if (!to) continue;
+-+      const r = await sendEmail({ to, subject, html });
+-+      if (r.success) sent++;
+-+    } catch (err) {
+-+      console.error(`[billing] could not notify admin ${id}:`, err);
+-+    }
+-+  }
+-+  return { sent };
+-+}
+-diff --git a/lib/billing/adminSummary.ts b/lib/billing/adminSummary.ts
+-new file mode 100644
+-index 0000000..0723610
+---- /dev/null
+-+++ b/lib/billing/adminSummary.ts
+-@@ -0,0 +1,43 @@
+-+// lib/billing/adminSummary.ts
+-+//
+-+// "What needs the owner's attention?" — drives the dashboard banner and the
+-+// monthly heads-up email. Drafts are always for the month that just closed;
+-+// overdue covers any SENT statement past its due date, from any month.
+-+
+-+import { prisma } from '@/lib/prisma';
+-+import { periodKeyFor, previousPeriodKey, formatPeriodLabel } from '@/lib/billing/period';
+-+
+-+export interface ReviewSummary {
+-+  period:        string;
+-+  periodLabel:   string;
+-+  draftCount:    number;
+-+  draftCents:    number;
+-+  overdueCount:  number;
+-+  overdueCents:  number;
+-+}
+-+
+-+export async function getReviewSummary(now: Date = new Date()): Promise<ReviewSummary> {
+-+  const period = previousPeriodKey(periodKeyFor(now));
+-+
+-+  const [drafts, overdue] = await Promise.all([
+-+    prisma.billingStatement.aggregate({
+-+      where:  { periodKey: period, status: 'DRAFT' },
+-+      _count: { _all: true },
+-+      _sum:   { totalCents: true },
+-+    }),
+-+    prisma.billingStatement.aggregate({
+-+      where:  { status: 'SENT', dueAt: { lt: now } },
+-+      _count: { _all: true },
+-+      _sum:   { totalCents: true },
+-+    }),
+-+  ]);
+-+
+-+  return {
+-+    period,
+-+    periodLabel:  formatPeriodLabel(period),
+-+    draftCount:   drafts._count._all,
+-+    draftCents:   drafts._sum.totalCents ?? 0,
+-+    overdueCount: overdue._count._all,
+-+    overdueCents: overdue._sum.totalCents ?? 0,
+-+  };
+-+}
+-diff --git a/lib/billing/statements.ts b/lib/billing/statements.ts
+-index 0d2a6e5..d651067 100644
+---- a/lib/billing/statements.ts
+-+++ b/lib/billing/statements.ts
+-@@ -275,6 +275,23 @@ export async function sendStatement(statementId: string, opts: { resend?: boolea
+-   return { ok: true, statement: updated, sentTo: delivered };
+- }
+- 
+-+export interface SendAllRow { statementId: string; number: string; ok: boolean; error?: string }
+-+
+-+/** Email every DRAFT statement for a month. One failure never stops the rest; failed ones stay DRAFT to retry. */
+-+export async function sendAllDrafts(periodKey: string): Promise<SendAllRow[]> {
+-+  const drafts = await prisma.billingStatement.findMany({
+-+    where:   { periodKey, status: 'DRAFT' },
+-+    select:  { id: true, number: true },
+-+    orderBy: { createdAt: 'asc' },
+-+  });
+-+  const rows: SendAllRow[] = [];
+-+  for (const d of drafts) {
+-+    const r = await sendStatement(d.id);
+-+    rows.push(r.ok ? { statementId: d.id, number: d.number, ok: true } : { statementId: d.id, number: d.number, ok: false, error: r.error });
+-+  }
+-+  return rows;
+-+}
+-+
+- // ── Mark paid / void ─────────────────────────────────────────────────────────
+- 
+- export type TransitionResult =
+--- 
+-2.43.0
+-
+diff --git a/next.config.js b/next.config.js
+index 0968860..067120c 100644
+--- a/next.config.js
++++ b/next.config.js
+@@ -1,11 +1,8 @@
+ /** @type {import('next').NextConfig} */
+ const nextConfig = {
+   reactStrictMode: true,
+-  experimental: {
+-    serverActions: {
+-      enabled: true,
+-    },
+-  },
++  // (experimental.serverActions.enabled removed — Server Actions are always
++  // on in current Next.js and `enabled` is not a recognised option.)
+ 
+   // Image domains for Next.js Image component
+   images: {
+diff --git a/proxy.ts b/proxy.ts
+index 9509a1f..d74a76c 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -15,9 +15,9 @@ const cdnOrigin = process.env.NEXT_PUBLIC_CDN_URL;
+ // not automatically public.
+ //
+ // EDGE_AUTH_MODE:
+-//   log     (DEFAULT) blocks nothing; logs "[edge-auth] WOULD BLOCK …" for every
++//   log     (default outside production) blocks nothing; logs "[edge-auth] WOULD BLOCK …" for every
+ //           signed-out request that enforce mode would stop. Safe to deploy.
+-//   enforce signed-out → API paths get 401 JSON, pages redirect to /sign-in.
++//   enforce (DEFAULT in production) signed-out → API paths get 401 JSON, pages redirect to /sign-in.
+ //           Unrecognised paths are blocked too (deny by default).
+ //   off     does nothing (emergency switch — no redeploy of code needed).
+ // Roll-out: ship in `log`, watch the logs while using the app, then set
+@@ -66,7 +66,14 @@ export default clerkMiddleware(async (auth, req) => {
+       // production via NEXT_PUBLIC_CDN_URL. Without this, Clerk's
+       // default img-src ('self' https://img.clerk.com) blocks every one
+       // of them.
+-      'img-src': cdnOrigin ? [cdnOrigin] : [],
++      //
++      // data: is REQUIRED for QR codes — the QR page (and QRCodeDisplay,
++      // DownloadQRButton) render qrcode's toDataURL() output as
++      // <img src="data:image/png;base64,...">. Clerk's default img-src has no
++      // data:, so the browser refused every QR image ("Refused to load the
++      // image 'data:...' because it violates the Content Security Policy").
++      // blob: covers object-URL previews of files chosen for upload.
++      'img-src': ['data:', 'blob:', ...(cdnOrigin ? [cdnOrigin] : [])],
+       // app/globals.css (loaded on every page) and two inline
+       // @import-based style blocks (the QR print page, the memorial
+       // appearance editor) all pull from Google Fonts. Clerk's default
+@@ -81,6 +88,11 @@ export default clerkMiddleware(async (auth, req) => {
+       // origin — including fonts self-hosted by next/font (the landing
+       // page's Plus Jakarta Sans), which would have fallen back to a system
+       // font in production with no error anyone would see.
++      // Staff bulk upload PUTs files straight to the R2 bucket from the
++      // browser via presigned URLs (virtual-hosted <bucket>.<account>.r2…
++      // or path-style <account>.r2…). Without this the browser blocks the
++      // request before it leaves the page ("violates connect-src").
++      'connect-src': ['https://*.r2.cloudflarestorage.com'],
+       'style-src': ['https://fonts.googleapis.com'],
+       'font-src':  ["'self'", 'https://fonts.gstatic.com'],
+     },
+diff --git a/route.ts b/route.ts
+deleted file mode 100644
+index 969dc05..0000000
+--- a/route.ts
++++ /dev/null
+@@ -1,289 +0,0 @@
+-// app/api/memorials/[id]/qr/route.ts
+-//
+-// GET  — Returns QR code SVG + current lifecycle config for a memorial
+-// PUT  — Updates QR lifecycle config (state, service time, unlock time, pamphlet)
+-//
+-// Protected by: Clerk auth in proxy.ts, plus explicit auth() + assertMemorialAccess below
+-// Feature flag: featureQrLifecycle must be true for the user's org
+-//
+-// publicToken is generated lazily on first GET — not at memorial creation.
+-// This means all existing V1 memorials get a permanent token the first time
+-// a funeral home opens the QR panel. Safe and non-breaking.
+-//
+-// Uses crypto.randomUUID() — available in all Node.js 19+ / Vercel runtimes.
+-// No nanoid dependency needed.
+-
+-import { NextRequest }  from 'next/server';
+-import { auth }         from '@clerk/nextjs/server';
+-import QRCode           from 'qrcode';
+-import { prisma }       from '@/lib/prisma';
+-import {
+-  assertMemorialAccess,
+-  assertFeatureEnabled,
+-}                       from '@/lib/auth/getOrgForUser';
+-import {
+-  isValidQRState,
+-  isValidTransition,
+-  calculateUnlockAt,
+-  stateLabel,
+-  stateDescription,
+-  computeEffectiveState,
+-}                       from '@/lib/qr/lifecycle';
+-import { generatePublicToken } from '@/lib/qr';
+-import {
+-  CommonErrors,
+-  successResponse,
+-  withErrorHandling,
+-}                       from '@/lib/errors';
+-import type { QRState, QRConfigUpdate } from '@/types/v2';
+-
+-// ── Token generation ──────────────────────────────────────────────────────────
+-// generatePublicToken() now lives in lib/qr.ts — imported above.
+-// (Previously defined here; consolidated to avoid drift across the several
+-// other call sites that also need to lazily generate a publicToken.)
+-
+-// ── GET ───────────────────────────────────────────────────────────────────────
+-
+-export const GET = withErrorHandling(async (
+-  req: NextRequest,
+-  { params }: { params: Promise<{ id: string }> },
+-) => {
+-  const { id } = await params;
+-
+-  const { userId } = await auth();
+-  if (!userId) return CommonErrors.unauthorized();
+-
+-  await assertMemorialAccess(id, userId, 'read');
+-  await assertFeatureEnabled(userId, 'qrLifecycle');
+-
+-  const memorial = await prisma.memorial.findUnique({
+-    where: { id: id },
+-    select: {
+-      id:                true,
+-      slug:              true,
+-      publicToken:       true,
+-      qrState:           true,
+-      serviceStartAt:    true,
+-      unlockAt:          true,
+-      pamphletEnabled:   true,
+-      pamphletTitle:     true,
+-      pamphletVenueNote: true,
+-      pamphletMessage:   true,
+-      organisation: {
+-        select: { defaultUnlockDelayHours: true },
+-      },
+-    },
+-  });
+-
+-  if (!memorial) return CommonErrors.notFound('Memorial');
+-
+-  // Generate publicToken if not yet assigned — idempotent after first call
+-  let { publicToken } = memorial;
+-  if (!publicToken) {
+-    publicToken = generatePublicToken();
+-    await prisma.memorial.update({
+-      where: { id: id },
+-      data:  { publicToken },
+-    });
+-  }
+-
+-  // No fallback on purpose: a QR code printed with the wrong domain is
+-  // permanent. Fail loudly instead.
+-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+-  if (!appUrl) {
+-    throw new Error('NEXT_PUBLIC_APP_URL is not set — cannot generate QR URL');
+-  }
+-
+-  // Every memorial should have a slug by this point (backfilled + set at
+-  // creation going forward — see lib/memorial/slug.ts). This fallback
+-  // exists only to avoid a broken QR URL in the unlikely case an older
+-  // row somehow slipped through without one; it should never trigger in
+-  // practice post-backfill.
+-  const urlSlug = memorial.slug ?? memorial.id;
+-  const qrUrl   = `${appUrl}/v/${urlSlug}?key=${publicToken}`;
+-
+-  // Generate QR as SVG string.
+-  // errorCorrectionLevel H = 30% damage recovery — important for physical materials
+-  // (plaques, booklets, headstones) that may become worn over 20+ years.
+-  // Color option removed — not supported by qrcode toString for SVG type.
+-  const qrSvg = await QRCode.toString(qrUrl, {
+-    type:                 'svg',
+-    errorCorrectionLevel: 'H',
+-    margin:               2,
+-  });
+-
+-  const effectiveState = computeEffectiveState({
+-    qrState:        memorial.qrState,
+-    serviceStartAt: memorial.serviceStartAt,
+-    unlockAt:       memorial.unlockAt,
+-  });
+-
+-  const defaultDelayHours = memorial.organisation?.defaultUnlockDelayHours ?? 24;
+-
+-  return successResponse({
+-    publicToken,
+-    slug: urlSlug,
+-    qrUrl,
+-    qrSvg,
+-    qrState:          memorial.qrState as QRState,
+-    effectiveState,
+-    stateLabel:       stateLabel(effectiveState),
+-    stateDescription: stateDescription(effectiveState),
+-    serviceStartAt:   memorial.serviceStartAt?.toISOString() ?? null,
+-    unlockAt:         memorial.unlockAt?.toISOString() ?? null,
+-    pamphletEnabled:   memorial.pamphletEnabled,
+-    pamphletTitle:     memorial.pamphletTitle,
+-    pamphletVenueNote: memorial.pamphletVenueNote,
+-    pamphletMessage:   memorial.pamphletMessage,
+-    defaultUnlockDelayHours: defaultDelayHours,
+-    // Suggested unlock time shown in the dashboard config UI
+-    suggestedUnlockAt: memorial.serviceStartAt
+-      ? calculateUnlockAt(
+-          memorial.serviceStartAt,
+-          defaultDelayHours,
+-        ).toISOString()
+-      : null,
+-  });
+-});
+-
+-// ── PUT ───────────────────────────────────────────────────────────────────────
+-
+-export const PUT = withErrorHandling(async (
+-  req: NextRequest,
+-  { params }: { params: Promise<{ id: string }> },
+-) => {
+-  const { id } = await params;
+-
+-  const { userId } = await auth();
+-  if (!userId) return CommonErrors.unauthorized();
+-
+-  await assertMemorialAccess(id, userId, 'edit');
+-  await assertFeatureEnabled(userId, 'qrLifecycle');
+-
+-  let body: QRConfigUpdate;
+-  try {
+-    body = await req.json();
+-  } catch {
+-    return CommonErrors.badRequest('Invalid JSON body');
+-  }
+-  if (!body || typeof body !== 'object') {
+-    return CommonErrors.badRequest('Invalid body');
+-  }
+-  for (const k of ['pamphletTitle', 'pamphletVenueNote', 'pamphletMessage'] as const) {
+-    const v = body[k];
+-    if (v !== undefined && v !== null && typeof v !== 'string') {
+-      return CommonErrors.badRequest(`${k} must be a string`);
+-    }
+-  }
+-  if (body.pamphletEnabled !== undefined && typeof body.pamphletEnabled !== 'boolean') {
+-    return CommonErrors.badRequest('pamphletEnabled must be a boolean');
+-  }
+-  if (typeof body.pamphletTitle === 'string' && body.pamphletTitle.length > 200) {
+-    return CommonErrors.badRequest('pamphletTitle too long (max 200)');
+-  }
+-  for (const k of ['pamphletVenueNote', 'pamphletMessage'] as const) {
+-    const v = body[k];
+-    if (typeof v === 'string' && v.length > 2000) {
+-      return CommonErrors.badRequest(`${k} too long (max 2000)`);
+-    }
+-  }
+-
+-  // Fetch current state for transition validation
+-  const current = await prisma.memorial.findUnique({
+-    where:  { id: id },
+-    select: { qrState: true },
+-  });
+-  if (!current) return CommonErrors.notFound('Memorial');
+-
+-  // Validate new qrState if provided
+-  if (body.qrState !== undefined) {
+-    if (!isValidQRState(body.qrState)) {
+-      return CommonErrors.badRequest(
+-        `Invalid qrState "${body.qrState}". ` +
+-        `Valid values: PRE_SERVICE, SERVICE_ACTIVE, UNLOCK_PENDING, ` +
+-        `MEMORIAL_OPEN, PRIVATE, ARCHIVED`,
+-      );
+-    }
+-
+-    const from = current.qrState as QRState;
+-    const to   = body.qrState;
+-
+-    // ARCHIVED is terminal — no transitions out
+-    if (from === 'ARCHIVED') {
+-      return CommonErrors.badRequest('Archived memorials cannot change state');
+-    }
+-
+-    if (!isValidTransition(from, to)) {
+-      return CommonErrors.badRequest(
+-        `Cannot transition from ${from} to ${to}`,
+-      );
+-    }
+-  }
+-
+-  // Validate and parse dates
+-  let serviceStartAt: Date | undefined;
+-  let unlockAt: Date | undefined;
+-
+-  if (body.serviceStartAt !== undefined) {
+-    const d = new Date(body.serviceStartAt);
+-    if (isNaN(d.getTime())) {
+-      return CommonErrors.badRequest(
+-        'Invalid serviceStartAt — must be ISO 8601 e.g. 2024-06-15T14:00:00Z',
+-      );
+-    }
+-    serviceStartAt = d;
+-  }
+-
+-  if (body.unlockAt !== undefined) {
+-    const d = new Date(body.unlockAt);
+-    if (isNaN(d.getTime())) {
+-      return CommonErrors.badRequest(
+-        'Invalid unlockAt — must be ISO 8601 e.g. 2024-06-16T14:00:00Z',
+-      );
+-    }
+-    if (serviceStartAt && d < serviceStartAt) {
+-      return CommonErrors.badRequest(
+-        'unlockAt must not be before serviceStartAt',
+-      );
+-    }
+-    unlockAt = d;
+-  }
+-
+-  // Build update — only include fields that were explicitly provided
+-  const data: Record<string, unknown> = {};
+-  if (body.qrState           !== undefined) data.qrState           = body.qrState;
+-  if (serviceStartAt         !== undefined) data.serviceStartAt    = serviceStartAt;
+-  if (unlockAt               !== undefined) data.unlockAt          = unlockAt;
+-  if (body.pamphletEnabled   !== undefined) data.pamphletEnabled   = body.pamphletEnabled;
+-  if (body.pamphletTitle     !== undefined) data.pamphletTitle     = body.pamphletTitle?.trim()     || null;
+-  if (body.pamphletVenueNote !== undefined) data.pamphletVenueNote = body.pamphletVenueNote?.trim() || null;
+-  if (body.pamphletMessage   !== undefined) data.pamphletMessage   = body.pamphletMessage?.trim()   || null;
+-
+-  const updated = await prisma.memorial.update({
+-    where:  { id: id },
+-    data,
+-    select: {
+-      id:                true,
+-      qrState:           true,
+-      serviceStartAt:    true,
+-      unlockAt:          true,
+-      pamphletEnabled:   true,
+-      pamphletTitle:     true,
+-      pamphletVenueNote: true,
+-      pamphletMessage:   true,
+-    },
+-  });
+-
+-  const effectiveState = computeEffectiveState({
+-    qrState:        updated.qrState,
+-    serviceStartAt: updated.serviceStartAt,
+-    unlockAt:       updated.unlockAt,
+-  });
+-
+-  return successResponse({
+-    ...updated,
+-    effectiveState,
+-    stateLabel:       stateLabel(effectiveState),
+-    stateDescription: stateDescription(effectiveState),
+-  });
+-});
+diff --git a/scripts/backfill-public-tokens.ts b/scripts/backfill-public-tokens.ts
+new file mode 100644
+index 0000000..5a46d3e
+--- /dev/null
++++ b/scripts/backfill-public-tokens.ts
+@@ -0,0 +1,31 @@
++// scripts/backfill-public-tokens.ts
++//
++// One-off: issues a publicToken for every Memorial that doesn't have one.
++// New memorials now get a token at creation (lib/memorial/createMemorial.ts);
++// this covers rows created before that change.
++//
++// Usage:  npx tsx scripts/backfill-public-tokens.ts
++// Safe to re-run: only touches rows where publicToken IS NULL.
++
++import { prisma } from '../lib/prisma';
++import { generatePublicToken } from '../lib/qr';
++
++async function main() {
++  const rows = await prisma.memorial.findMany({
++    where:  { publicToken: null },
++    select: { id: true, title: true },
++  });
++  console.log(`Found ${rows.length} memorial(s) without a publicToken.`);
++
++  for (const m of rows) {
++    // updateMany with the null guard so a concurrent lazy-generation
++    // (QR panel open) can never be overwritten.
++    const res = await prisma.memorial.updateMany({
++      where: { id: m.id, publicToken: null },
++      data:  { publicToken: generatePublicToken() },
++    });
++    console.log(`${res.count ? 'set    ' : 'skipped'} ${m.id}  ${m.title}`);
++  }
++}
++
++main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

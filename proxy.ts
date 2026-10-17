@@ -15,9 +15,9 @@ const cdnOrigin = process.env.NEXT_PUBLIC_CDN_URL;
 // not automatically public.
 //
 // EDGE_AUTH_MODE:
-//   log     (DEFAULT) blocks nothing; logs "[edge-auth] WOULD BLOCK …" for every
+//   log     (default outside production) blocks nothing; logs "[edge-auth] WOULD BLOCK …" for every
 //           signed-out request that enforce mode would stop. Safe to deploy.
-//   enforce signed-out → API paths get 401 JSON, pages redirect to /sign-in.
+//   enforce (DEFAULT in production) signed-out → API paths get 401 JSON, pages redirect to /sign-in.
 //           Unrecognised paths are blocked too (deny by default).
 //   off     does nothing (emergency switch — no redeploy of code needed).
 // Roll-out: ship in `log`, watch the logs while using the app, then set
@@ -88,6 +88,11 @@ export default clerkMiddleware(async (auth, req) => {
       // origin — including fonts self-hosted by next/font (the landing
       // page's Plus Jakarta Sans), which would have fallen back to a system
       // font in production with no error anyone would see.
+      // Staff bulk upload PUTs files straight to the R2 bucket from the
+      // browser via presigned URLs (virtual-hosted <bucket>.<account>.r2…
+      // or path-style <account>.r2…). Without this the browser blocks the
+      // request before it leaves the page ("violates connect-src").
+      'connect-src': ['https://*.r2.cloudflarestorage.com'],
       'style-src': ['https://fonts.googleapis.com'],
       'font-src':  ["'self'", 'https://fonts.gstatic.com'],
     },

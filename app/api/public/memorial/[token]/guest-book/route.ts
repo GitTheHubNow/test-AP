@@ -32,6 +32,7 @@ import { initialPublicStatus } from '@/lib/moderation';
 import { MemorialStatus } from '@prisma/client';
 import { AuditAction, ActorRole, EntityType, ReasonCode, createAuditEvent } from '@/lib/audit';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { getIpHashSalt } from '@/lib/ipSalt';
 
 const MAX_MESSAGE_LEN  = 1000;   // matches GuestBookForm's textarea maxLength
 const MAX_AUTHOR_LEN   = 100;    // matches GuestBookForm's input maxLength
@@ -47,7 +48,7 @@ function hashIp(request: NextRequest): string | null {
     || request.headers.get('x-real-ip')
     || null;
   if (!ip) return null;
-  const salt = process.env.IP_HASH_SALT ?? 'memoriam-salt';
+  const salt = getIpHashSalt();
   return createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 32);
 }
 

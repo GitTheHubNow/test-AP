@@ -21,6 +21,20 @@ import { recordUsage } from '@/lib/billing/usage';
 import { generateUniqueSlug } from '@/lib/memorial/slug';
 import { generatePublicToken } from '@/lib/qr';
 import { EntityType, AuditAction, ActorRole, ReasonCode } from '@/lib/audit';
+import { validateMemorialInput } from '@/lib/memorial/validateInput';
+
+/**
+ * Max memorials a site can create while its FREE TRIAL is running. Trial
+ * memorials are billed at $0, so without a cap a throwaway sign-up could mint
+ * unlimited free memorials (and storage). Paying sites (no trial / trial over)
+ * are never capped. Override with TRIAL_MEMORIAL_LIMIT; 0 disables the cap.
+ */
+function getTrialMemorialLimit(): number {
+  const raw = process.env.TRIAL_MEMORIAL_LIMIT;
+  if (raw === undefined || raw.trim() === '') return 10;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : 10;
+}
 
 export interface CreateMemorialInput {
   ownerId:              string;   // Clerk userId — attributed creator
@@ -45,6 +59,14 @@ export interface CreateMemorialInput {
   isMaori?:                 boolean;
   nominatedEmail?: string;
   sendAfterDays?:  number;
+  /**
+   * If set, an identical-looking memorial (same owner + org + name) created
+   * within this many ms is returned instead of creating a second one — so a
+   * double-click or network retry can't create (and bill) two. The manual
+   * form opts in; CSV import does NOT (a CSV can legitimately hold two
+   * people with the same name).
+   */
+  dedupeWindowMs?: number;
 }
 
 export type CreateMemorialResult =
@@ -52,21 +74,59 @@ export type CreateMemorialResult =
   // 'plan_limit' is now only returned for a SUSPENDED account (kept as the
   // kind name so existing callers — app/api/memorial/route.ts and the CSV
   // import — keep working unchanged).
-  | { ok: false; kind: 'validation' | 'plan_limit' | 'server_error'; error: string };
+  | { ok: false; kind: 'validation' | 'plan_limit' | 'server_error'; error: string; code?: string };
 
 export async function createMemorial(input: CreateMemorialInput): Promise<CreateMemorialResult> {
+  const invalid = validateMemorialInput(input as unknown as Record<string, unknown>);
+  if (invalid) return { ok: false, kind: 'validation', error: invalid };
+
   const firstName = input.firstName.trim();
   const lastName  = input.lastName.trim();
 
-  if (!firstName) return { ok: false, kind: 'validation', error: 'firstName is required' };
-  if (!lastName)  return { ok: false, kind: 'validation', error: 'lastName is required' };
-
-  // No quantity cap — every memorial is recorded in the usage ledger and
-  // billed on the site's monthly statement. This only blocks a SUSPENDED
-  // account.
+  // No quantity cap for paying sites — every memorial is recorded in the
+  // usage ledger and billed on the site's monthly statement. This blocks a
+  // SUSPENDED account, and caps a site that is still inside its free trial.
   const entitlement = await checkAccountActive(input.organisationId);
   if (!entitlement.allowed) {
-    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Account suspended' };
+    return { ok: false, kind: 'plan_limit', error: entitlement.reason ?? 'Account suspended', code: 'ACCOUNT_SUSPENDED' };
+  }
+
+  const trialLimit = getTrialMemorialLimit();
+  if (trialLimit > 0) {
+    const org = await prisma.organisation.findUnique({
+      where:  { id: input.organisationId },
+      select: { trialEndsAt: true },
+    });
+    if (org?.trialEndsAt && org.trialEndsAt.getTime() > Date.now()) {
+      const existing = await prisma.memorial.count({ where: { organisationId: input.organisationId } });
+      if (existing >= trialLimit) {
+        return {
+          ok: false, kind: 'plan_limit', code: 'TRIAL_LIMIT_REACHED',
+          error: `Your free trial includes up to ${trialLimit} memorials. Please contact support to continue.`,
+        };
+      }
+    }
+  }
+
+  if (input.dedupeWindowMs && input.dedupeWindowMs > 0) {
+    const dup = await prisma.memorial.findFirst({
+      where: {
+        ownerId: input.ownerId, organisationId: input.organisationId,
+        firstName, lastName,
+        createdAt: { gte: new Date(Date.now() - input.dedupeWindowMs) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, slug: true, qrTokenHash: true, uploadLinkToken: true, workflowStage: true },
+    });
+    if (dup && dup.slug && dup.uploadLinkToken) {
+      return {
+        ok: true,
+        memorial: {
+          id: dup.id, title: dup.title, slug: dup.slug, qrTokenHash: dup.qrTokenHash,
+          uploadLinkToken: dup.uploadLinkToken, workflowStage: dup.workflowStage,
+        },
+      };
+    }
   }
 
   const title = `${firstName} ${lastName}`;

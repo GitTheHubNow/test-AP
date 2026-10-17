@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth }                       from '@clerk/nextjs/server';
 import { prisma }                     from '@/lib/prisma';
 import { Prisma }                     from '@prisma/client';
-import { assertFeatureEnabled, getOrgIdForUser } from '@/lib/tenant';
+import { assertFeatureEnabled, getOrgIdForUser, orgErrorResponse } from '@/lib/tenant';
 // Role-aware access check. Was importing assertMemorialAccess from
 // '@/lib/tenant' (org-membership only, no role check) — a VIEWER-role org
 // member could create/list product requests for any memorial in the org.
@@ -66,6 +66,7 @@ export async function GET(
     return NextResponse.json({ success: true, data: { requests } });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     return handleAuthError(err);
   }
 }
@@ -216,6 +217,7 @@ export async function POST(
     return NextResponse.json({ success: true, data: { request } }, { status: 201 });
 
   } catch (err: any) {
+    { const _orgErr = orgErrorResponse(err); if (_orgErr) return _orgErr; }
     return handleAuthError(err);
   }
 }
